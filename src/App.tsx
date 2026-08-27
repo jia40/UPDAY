@@ -1,12 +1,7 @@
-import './App.css'
+import { auth, db } from "./lib/firebase";
 
 function App() {
-
-
-  return (
-    <>
-    </>
-  )
+  return <h1>Upday</h1>;
 }
 
-export default App
+export default App;
