@@ -1,7 +1,7 @@
-import { auth, db } from "./lib/firebase";
+import LoginPage from './pages/LoginPage'
 
 function App() {
-  return <h1>Upday</h1>;
+  return <LoginPage />
 }
 
-export default App;
+export default App
