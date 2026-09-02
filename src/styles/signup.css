@@ -9,6 +9,14 @@
 .signup-form .login-form__field { gap: 6px; }
 .signup-form .login-form__field input { min-height: 46px; }
 .signup-form .login-button { min-height: 48px; margin-top: 4px; }
+.signup-form__error { margin: 0; color: #c33d3d; font-size: 13px; line-height: 1.4; }
+.signup-form__message { margin: 2px 0; padding: 11px 13px; border-radius: 10px; font-size: 14px; line-height: 1.45; }
+.signup-form__message--error { color: #a52f2f; background: #fff1f1; }
+.signup-form__message--success { color: #24753c; background: #edf8f0; }
+.signup-form .login-form__field input[aria-invalid='true'] { border-color: #c95555; }
+.signup-form .login-form__field input[aria-invalid='true']:focus-visible { box-shadow: 0 0 0 3px rgba(201,85,85,.16); }
+.signup-form .login-form__field input:disabled { color: #78817b; background: #f4f6f4; cursor: not-allowed; }
+.signup-form .login-button:disabled { background: #75aa86; border-color: #75aa86; box-shadow: none; cursor: not-allowed; transform: none; }
 .signup-divider { display: flex; align-items: center; gap: 16px; margin: 16px 0; color: #8a938d; font-size: 13px; }
 .signup-divider::before, .signup-divider::after { flex: 1; height: 1px; background: #e1e6e2; content: ''; }
 .google-login-button { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 48px; padding: 0 24px; color: #344239; background: #fff; border: 1px solid #d6ddd8; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
