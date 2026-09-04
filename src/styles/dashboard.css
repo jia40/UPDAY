@@ -1,0 +1,6 @@
+.dashboard-page { min-height: 100vh; background: #f7faf7; }
+.dashboard-header { display: flex; align-items: center; min-height: 72px; padding: 0 clamp(24px, 6vw, 80px); background: #fff; border-bottom: 1px solid #e3ebe5; }
+.dashboard-main { width: min(100% - 48px, 1120px); margin: 0 auto; padding: clamp(72px, 12vw, 140px) 0; }
+.dashboard-main__eyebrow { margin: 0 0 14px; color: #2f8f50; font-size: 12px; font-weight: 800; letter-spacing: .14em; }
+.dashboard-main h1 { margin: 0; color: #173d26; font-size: clamp(32px, 5vw, 54px); line-height: 1.2; letter-spacing: -.05em; }
+.dashboard-main > p:last-child { margin: 20px 0 0; color: #69736c; font-size: 17px; }
