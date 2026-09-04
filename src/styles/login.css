@@ -32,10 +32,16 @@
 .login-form__field input::placeholder { color: #9aa39d; }
 .login-form__field input:hover { border-color: #aebbb2; }
 .login-form__field input:focus-visible { border-color: #2f8f50; box-shadow: 0 0 0 3px rgba(47,143,80,.18); }
+.login-form__field input[aria-invalid='true'] { border-color: #c95555; }
+.login-form__field input[aria-invalid='true']:focus-visible { box-shadow: 0 0 0 3px rgba(201,85,85,.16); }
+.login-form__field input:disabled { color: #78817b; background: #f4f6f4; cursor: not-allowed; }
+.login-form__error { margin: 0; color: #c33d3d; font-size: 13px; line-height: 1.4; }
+.login-form__message { margin: 0; padding: 11px 13px; color: #a52f2f; background: #fff1f1; border-radius: 10px; font-size: 14px; line-height: 1.45; }
 .login-button { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 56px; margin-top: 8px; padding: 0 24px; color: #fff; background: #2f8f50; border: 1px solid #2f8f50; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
 .login-button:hover { background: #287b45; border-color: #287b45; box-shadow: 0 4px 10px rgba(24,82,43,.16); transform: translateY(-1px); }
 .login-button:active { background: #236d3d; transform: translateY(0); }
 .login-button:focus-visible { outline: 3px solid rgba(47,143,80,.28); outline-offset: 3px; }
+.login-button:disabled { background: #75aa86; border-color: #75aa86; box-shadow: none; cursor: not-allowed; transform: none; }
 .signup-link { margin: 24px 0 0; color: #737e77; font-size: 14px; text-align: center; }
 .signup-link a { color: #287b45; font-weight: 700; text-underline-offset: 3px; }
 .signup-link a:hover { color: #1f6638; }
