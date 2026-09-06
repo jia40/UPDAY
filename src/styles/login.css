@@ -1,9 +1,6 @@
 .login-page { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(440px, .92fr); min-height: 100vh; background: #fff; }
 .brand-panel { display: flex; min-height: 100vh; padding: clamp(40px, 5vw, 72px); overflow: hidden; background: #f3f8f4; border-right: 1px solid #e3ebe5; }
 .brand-panel__content { display: flex; flex: 1; flex-direction: column; width: min(100%, 680px); margin: 0 auto; }
-.brand-logo { display: inline-flex; align-items: center; align-self: flex-start; gap: 10px; color: #163d25; font-size: 20px; font-weight: 800; letter-spacing: .08em; text-decoration: none; }
-.brand-logo__mark { width: 16px; height: 16px; background: #2f8f50; border-radius: 5px 5px 5px 1px; transform: rotate(-8deg); }
-.brand-logo:focus-visible { outline: 3px solid rgba(47,143,80,.3); outline-offset: 5px; border-radius: 4px; }
 .brand-copy { margin-top: clamp(72px, 11vh, 124px); }
 .brand-copy h1 { max-width: 600px; margin: 0; color: #173d26; font-size: clamp(42px, 4.4vw, 68px); line-height: 1.16; letter-spacing: -.055em; }
 .brand-copy p { margin: 28px 0 0; color: #607167; font-size: clamp(16px, 1.3vw, 19px); line-height: 1.75; letter-spacing: -.01em; }
