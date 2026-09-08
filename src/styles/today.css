@@ -1,0 +1,388 @@
+.today-page {
+  width: min(100% - 32px, 800px);
+  margin: 0 auto;
+  color: #243d2c;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0;
+}
+
+.today-eyebrow {
+  display: flex;
+  align-items: baseline;
+  margin: 0 0 6px;
+  color: #2f8f50;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  gap: 12px;
+}
+
+.today-page time, .today-heading-row p, .today-note {
+  color: #607066;
+  line-height: 1.8;
+}
+
+.today-page h1 {
+  font-size: clamp(26px, 4vw, 38px);
+  letter-spacing: -.04em;
+}
+
+.today-panel {
+  background: white;
+  border: 1px solid #dce7df;
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  margin-top: 16px;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.today-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.today-summary h2 {
+  font-size: 21px;
+  margin: 0 0 10px;
+}
+
+.today-summary span {
+  color: #43644b;
+  font-size: 14px;
+}
+
+.today-panel progress {
+  width: 100%;
+  height: 10px;
+  accent-color: #2f8f50;
+}
+
+.today-add {
+  margin: 14px 0;
+}
+
+.today-input-label, .todo-edit > label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.today-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.today-page input:not([type=checkbox]) {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #b8c9bd;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.today-page button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid #c9d8cd;
+  border-radius: 8px;
+  background: #f0f6f2;
+  color: #285d37;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.today-input-row > button {
+  background: #286d3e;
+  color: white;
+}
+
+.today-page button:disabled, .today-page input:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.today-page button:focus-visible, .today-page input[type=checkbox]:focus-visible {
+  outline: 2px solid #647268;
+  outline-offset: 3px;
+}
+
+.today-page input:not([type=checkbox]):focus {
+  outline: none;
+}
+
+.today-error {
+  color: #a52f2f;
+  line-height: 1.7;
+}
+
+.today-empty {
+  padding: 36px 8px;
+  text-align: center;
+  color: #607066;
+}
+
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  border: 1px solid #e3ebe5;
+  border-radius: 10px;
+}
+
+.todo-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-top: 1px solid #e3ebe5;
+}
+
+.todo-check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.todo-check input {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  accent-color: #2f8f50;
+}
+
+.todo-check span {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
+.todo-completed {
+  text-decoration: line-through;
+  color: #69736c;
+}
+
+.todo-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.todo-edit {
+  width: 100%;
+}
+
+.todo-edit .todo-actions {
+  margin-top: 10px;
+  justify-content: flex-end;
+}
+
+.today-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+
+@media (max-width: 520px) {
+  .todo-list li {
+    flex-wrap: wrap;
+  }
+
+  .todo-list li > .todo-actions {
+    margin-left: auto;
+  }
+}
+
+.todo-more {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.today-page .todo-more__trigger {
+  width: 44px;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.today-page .todo-more__trigger:hover, .today-page .todo-more__trigger[aria-expanded=true] {
+  background: transparent;
+}
+
+.todo-more__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 5;
+  width: 136px;
+  padding: 6px;
+  border: 1px solid #dce7df;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 6px 20px #173d261a;
+}
+
+.today-page .todo-more__panel button {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.today-page .todo-more__panel button:hover {
+  background: #f0f6f2;
+}
+
+.today-page .todo-more__panel .todo-more__delete {
+  color: #a52f2f;
+}
+
+.today-heading-row {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  margin-top: 8px;
+}
+
+.today-heading-row h1 {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.today-heading-row p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.todo-list li:first-child {
+  border-top: 0;
+}
+
+.todo-list:focus-visible {
+  outline: 2px solid #647268;
+  outline-offset: 3px;
+}
+
+.todo-list:has(.todo-more__panel) {
+  padding-bottom: 120px;
+}
+
+@media (max-width: 600px) {
+  .today-heading-row {
+    gap: 12px;
+  }
+
+  .today-heading-row h1 {
+    font-size: 24px;
+  }
+
+  .today-heading-row p {
+    font-size: 12px;
+    word-break: keep-all;
+  }
+}
+
+/* Keep the page frame fixed; only the list consumes scrollable space. */
+
+.main-layout:has(.today-page) {
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.main-layout:has(.today-page) > .common-header {
+  flex-shrink: 0;
+}
+
+.main-layout:has(.today-page) > main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.today-page > header, .today-note {
+  flex-shrink: 0;
+}
+
+.today-panel > :not(.todo-list) {
+  flex-shrink: 0;
+}
+
+@media (max-height: 650px) {
+  .today-page {
+    padding: 8px 0;
+  }
+
+  .today-panel {
+    margin-top: 8px;
+    padding: 12px;
+  }
+
+  .today-heading-row h1 {
+    font-size: 24px;
+  }
+
+  .today-add {
+    margin: 8px 0;
+  }
+
+  .today-note {
+    font-size: 11px;
+    line-height: 1.4;
+  }
+}
+
+.today-label {
+  font-size: 16px;
+}
+
+.today-eyebrow time {
+  font-size: 12px;
+}
+
+/* Announce saving without changing the list height. */
+.today-save-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.today-action-error {
+  height: 2.8em;
+  margin: 0 0 8px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.4;
+}

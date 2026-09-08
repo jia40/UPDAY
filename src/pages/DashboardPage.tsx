@@ -1,4 +1,6 @@
-import { auth } from '../lib/firebase'
+import DashboardTodayCard from '../components/DashboardTodayCard'
+import { useAuth } from '../hooks/useAuth'
+import { useToday } from '../hooks/useToday'
 import '../styles/dashboard.css'
 
 const cards = [
@@ -8,12 +10,13 @@ const cards = [
 ]
 
 function DashboardPage() {
-  const name = auth.currentUser?.displayName?.trim()
-  const today = new Date()
+  const { user } = useAuth()
+  const name = user?.displayName?.trim()
+  const dateValue = useToday()
+  const today = new Date(dateValue + 'T12:00:00')
   const dateLabel = new Intl.DateTimeFormat('ko-KR', {
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
   }).format(today)
-  const dateValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
   return (
     <section className="dashboard" aria-labelledby="dashboard-heading">
@@ -26,21 +29,11 @@ function DashboardPage() {
 
       <div className="dashboard__notice">
         <span aria-hidden="true">✦</span>
-        <p>성장 기록을 위한 공간을 준비하고 있어요. 기록 기능이 열리면 이곳에서 나의 현황을 확인할 수 있습니다.</p>
+        <p>오늘 할 일의 진행 상황을 확인해보세요. 학습 기록, 면접 준비, 취업 지원 기능도 준비하고 있습니다.</p>
       </div>
 
       <div className="dashboard__grid">
-        <section className="summary-card summary-card--today" aria-labelledby="today-heading">
-          <div className="summary-card__heading">
-            <div><p className="summary-card__label">TODAY</p><h2 id="today-heading">오늘 할 일</h2></div>
-            <span className="summary-card__symbol" aria-hidden="true">✓</span>
-          </div>
-          <div className="summary-card__metric"><span>완료 / 전체 할 일</span><strong aria-label="할 일 집계 준비 중">— / —</strong></div>
-          <div className="summary-card__progress-label"><span>오늘의 진행률</span><span>집계 준비 중</span></div>
-          <progress className="summary-card__progress" max={100} value={0} aria-label="오늘의 할 일 진행률" aria-valuetext="기록 기능 준비 중" />
-          <p className="summary-card__description">오늘 집중할 일을 정하고, 하나씩 완료하는 즐거움을 느껴보세요.</p>
-          <a className="summary-card__link" href="/today">오늘 할 일 시작하기 <span aria-hidden="true">→</span></a>
-        </section>
+        <DashboardTodayCard key={`${user?.uid}:${dateValue}`} userId={user?.uid} date={dateValue} />
 
         {cards.map((card) => (
           <section key={card.id} className={`summary-card summary-card--${card.id}`} aria-labelledby={`${card.id}-heading`}>
