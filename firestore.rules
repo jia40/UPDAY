@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /todos/{todoId} {
+      function signedIn() { return request.auth != null; }
+      function owner() { return signedIn() && resource.data.userId == request.auth.uid; }
+      function valid(data) {
+        return data.keys().hasAll(['userId', 'title', 'completed', 'date', 'createdAt'])
+          && data.keys().hasOnly(['userId', 'title', 'completed', 'date', 'createdAt'])
+          && data.userId is string && data.userId == request.auth.uid
+          && data.title is string && data.title.size() >= 1 && data.title.size() <= 100
+          && data.title.matches('.*[^\\s].*')
+          && data.completed is bool
+          && data.date is string && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && data.createdAt is timestamp;
+      }
+      allow read, delete: if owner();
+      allow create: if signedIn() && valid(request.resource.data)
+        && request.resource.data.completed == false
+        && request.resource.data.createdAt == request.time;
+      allow update: if owner() && valid(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'completed']);
+    }
+  }
+}
