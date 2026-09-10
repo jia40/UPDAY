@@ -1,6 +1,28 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /studyLogs/{logId} {
+      function owner() { return request.auth != null && resource.data.userId == request.auth.uid; }
+      function tagValid(tags, i) {
+        return tags.size() <= i || (tags[i] is string && tags[i].size() > 0 && tags[i].size() <= 30 && tags[i].matches('.*[^\\s].*'));
+      }
+      function valid(data) {
+        return data.keys().hasAll(['userId', 'title', 'content', 'tags', 'studyMinutes', 'createdAt'])
+          && data.keys().hasOnly(['userId', 'title', 'content', 'tags', 'studyMinutes', 'createdAt'])
+          && data.userId == request.auth.uid
+          && data.title is string && data.title.size() > 0 && data.title.size() <= 100 && data.title.matches('.*[^\\s].*')
+          && data.content is string && data.content.size() > 0 && data.content.size() <= 10000 && data.content.matches('[\\s\\S]*[^\\s][\\s\\S]*')
+          && data.studyMinutes is int && data.studyMinutes >= 1 && data.studyMinutes <= 1440
+          && data.createdAt is timestamp
+          && data.tags is list && data.tags.size() <= 10 && data.tags.toSet().size() == data.tags.size()
+          && tagValid(data.tags, 0) && tagValid(data.tags, 1) && tagValid(data.tags, 2) && tagValid(data.tags, 3) && tagValid(data.tags, 4)
+          && tagValid(data.tags, 5) && tagValid(data.tags, 6) && tagValid(data.tags, 7) && tagValid(data.tags, 8) && tagValid(data.tags, 9);
+      }
+      allow read, delete: if owner();
+      allow create: if request.auth != null && valid(request.resource.data) && request.resource.data.createdAt == request.time;
+      allow update: if owner() && valid(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content', 'tags', 'studyMinutes']);
+    }
     match /todos/{todoId} {
       function signedIn() { return request.auth != null; }
       function owner() { return signedIn() && resource.data.userId == request.auth.uid; }
