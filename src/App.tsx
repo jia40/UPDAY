@@ -5,6 +5,7 @@ import DashboardPage from './pages/DashboardPage'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import TodayPage from './pages/TodayPage'
+import StudyPage from './pages/StudyPage'
 
 function App() {
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
@@ -15,7 +16,7 @@ function App() {
   if (page || pathname === '/mypage') {
     return (
       <MainLayout pathname={pathname}>
-        {pathname === '/dashboard' ? <DashboardPage /> : pathname === '/today' ? <TodayPage /> : (
+        {pathname === '/dashboard' ? <DashboardPage /> : pathname === '/today' ? <TodayPage /> : pathname === '/study' ? <StudyPage /> : (
           <ComingSoonPage
             title={page?.label ?? '마이페이지'}
             description={page?.description ?? '내 계정 정보를 확인하는 공간입니다.'}
