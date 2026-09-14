@@ -1,0 +1,130 @@
+.common-modal {
+  width: min(360px, calc(100vw - 32px));
+  min-height: 240px;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 20px;
+  overflow-y: auto;
+  border: 1px solid #e0e9e2;
+  border-radius: 16px;
+  color: #243d2c;
+  background: #fff;
+  box-shadow: 0 20px 64px #17211b26;
+}
+
+.common-modal[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.common-modal::backdrop {
+  background: #17211b70;
+}
+
+.common-modal__body {
+  flex: 1;
+  min-height: auto;
+  align-content: center;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.common-modal__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 8px;
+  border-radius: 50%;
+  background: #eaf5ed;
+  color: #286d3e;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.common-modal h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.common-modal__message {
+  margin: 8px 0 0;
+  color: #607066;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.common-modal__error,
+.common-modal__status {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.common-modal__error {
+  color: #a52f2f;
+}
+
+.common-modal__error:empty,
+.common-modal__status:empty {
+  margin: 0;
+}
+
+.common-modal__actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.common-modal__button {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.common-modal__button--primary {
+  background: #286d3e;
+  color: #fff;
+}
+
+.common-modal__button--secondary {
+  background: #f2f6f3;
+  border-color: #dce7df;
+  color: #42594a;
+}
+
+.common-modal--danger .common-modal__button--primary {
+  background: #a52f2f;
+}
+
+.common-modal__button:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+.common-modal__button:focus-visible {
+  outline: 2px solid #647268;
+  outline-offset: 3px;
+}
+
+@media (max-width: 480px) {
+  .common-modal {
+    padding: 20px 18px;
+  }
+}
+
+.common-modal__icon--warning {
+  background: #fff0ef;
+  color: #a52f2f;
+}

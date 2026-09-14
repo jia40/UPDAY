@@ -1,3 +1,5 @@
+import ConfirmModal from '../components/common/ConfirmModal'
+import CompleteModal from '../components/common/CompleteModal'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { FirebaseError } from 'firebase/app'
 import { useAuth } from '../hooks/useAuth'
@@ -70,6 +72,8 @@ function TodayContent({ userId, date }: { userId: string; date: string }) {
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [pending, setPending] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Todo | null>(null)
+  const [deleteComplete, setDeleteComplete] = useState(false)
   const [retry, setRetry] = useState(0)
   const lock = useRef(false)
   const alive = useRef(true)
@@ -138,12 +142,19 @@ function TodayContent({ userId, date }: { userId: string; date: string }) {
               <label className="todo-check"><input type="checkbox" checked={todo.completed} disabled={pending} onChange={() => void run(() => completeTodo(todo.id, !todo.completed))} /><span className={todo.completed ? 'todo-completed' : ''}>{todo.title}</span></label>
               <TodoActions title={todo.title} disabled={pending}
                 onEdit={() => { setEditing(todo.id); setDraft(todo.title); setError('') }}
-                onDelete={() => { if (window.confirm(`“${todo.title}” 할 일을 삭제할까요?`)) void run(() => removeTodo(todo.id)) }} />
+                onDelete={() => { setError(''); setDeleteTarget(todo) }} />
             </>}
           </li>)}</ul>
         )}
       </section>
       <p className="today-note">오늘 등록한 할 일만 표시됩니다. 지난 기록은 보관되며, 날짜별 조회는 추후 제공됩니다. 미완료 항목은 다음 날로 자동 이동하지 않습니다.</p>
+      <ConfirmModal open={deleteTarget !== null} title="할 일 삭제" message={deleteTarget ? '“' + deleteTarget.title + '” 할 일을 삭제하시겠습니까?' : ''}
+        confirmLabel="삭제하기" destructive isPending={pending} error={error}
+        onClose={() => { if (!lock.current) { setDeleteTarget(null); setError('') } }}
+        onConfirm={() => {
+          if (deleteTarget) void run(() => removeTodo(deleteTarget.id), () => { setDeleteTarget(null); setDeleteComplete(true) })
+        }} />
+      <CompleteModal open={deleteComplete} message="할 일 삭제가 완료되었습니다." onClose={() => setDeleteComplete(false)} />
     </section>
   )
 }
