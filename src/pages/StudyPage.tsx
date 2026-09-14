@@ -1,3 +1,5 @@
+import ConfirmModal from '../components/common/ConfirmModal'
+import CompleteModal from '../components/common/CompleteModal'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { FirebaseError } from 'firebase/app'
 import { useAuth } from '../hooks/useAuth'
@@ -27,6 +29,8 @@ function StudyContent({ userId }: { userId: string }) {
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
   const [pending, setPending] = useState(false)
+  const [confirmation, setConfirmation] = useState<'delete' | 'cancel' | null>(null)
+  const [completion, setCompletion] = useState<{ message: string; url: string } | null>(null)
   const [retry, setRetry] = useState(0)
   const [input, setInput] = useState<StudyInput>(empty)
   const [hours, setHours] = useState('')
@@ -76,14 +80,9 @@ function StudyContent({ userId }: { userId: string }) {
       if (!navigator.onLine) throw new Error('네트워크 연결을 확인하고 다시 시도해주세요.')
       await action()
       if (!active.current) return
+      setConfirmation(null)
+      setStatus('')
       done()
-      setStatus('변경 사항을 저장했습니다.')
-      try {
-        const items = await fetchStudyLogs(userId)
-        if (active.current) { setLogs(items); setLoadError('') }
-      } catch (reason) {
-        if (active.current) setLoadError(`저장은 완료했지만 목록 갱신에 실패했습니다. ${errorText(reason)}`)
-      }
     } catch (reason) {
       if (active.current) { setError(errorText(reason)); setStatus('') }
     } finally {
@@ -108,11 +107,11 @@ function StudyContent({ userId }: { userId: string }) {
     }
     const savedInput = { ...input, studyMinutes: String(total) }
     try { validateStudy(savedInput) } catch (reason) { setError(errorText(reason)); return }
-    if (editing) void mutate(() => updateStudyLog(editing, savedInput), () => window.location.assign(detailUrl))
+    if (editing) void mutate(() => updateStudyLog(editing, savedInput), () => setCompletion({ message: '학습 기록 수정이 완료되었습니다.', url: detailUrl }))
     else {
       createId.current ??= newStudyId()
       const id = createId.current
-      void mutate(() => createStudyLog(id, userId, savedInput), () => window.location.assign(`/study?record=${encodeURIComponent(id)}`))
+      void mutate(() => createStudyLog(id, userId, savedInput), () => setCompletion({ message: '학습 기록 저장이 완료되었습니다.', url: '/study?record=' + encodeURIComponent(id) }))
     }
   }
   const detail = logs.find((log) => log.id === selected)
@@ -151,7 +150,7 @@ function StudyContent({ userId }: { userId: string }) {
               <label htmlFor="study-tags">태그 (선택)</label>
               <input id="study-tags" value={input.tags} onChange={(e) => setInput({ ...input, tags: e.target.value })} placeholder="React, JavaScript, CS" aria-describedby="study-tags-help" />
               <p id="study-tags-help" className="study-help">쉼표로 구분해주세요. 태그당 30자, 최대 10개까지 입력할 수 있습니다.</p>
-              <div className="study-actions"><button className="study-primary" type="submit">{editing ? '수정 저장' : '기록 저장'}</button><button type="button" onClick={() => { if (window.confirm('작성을 취소하고 돌아갈까요?')) window.location.assign(detailUrl) }}>취소</button></div>
+              <div className="study-actions"><button className="study-primary" type="submit">{editing ? '수정 저장' : '기록 저장'}</button><button type="button" onClick={() => { setError(''); setConfirmation('cancel') }}>취소</button></div>
             </fieldset>
           </form>
           <div className="study-feedback"><p role="alert">{error}</p><p role="status">{status}</p></div>
@@ -171,9 +170,7 @@ function StudyContent({ userId }: { userId: string }) {
             <h2 id="study-detail-title">{detail.title}</h2>
             <StudyRecordActions key={detail.id} title={detail.title} disabled={pending}
               onEdit={() => window.location.assign(`${detailUrl}&edit=1`)}
-              onDelete={() => {
-                if (window.confirm(`“${detail.title}” 기록을 삭제할까요?`)) void mutate(() => deleteStudyLog(detail.id), () => window.location.assign('/study'))
-              }} />
+              onDelete={() => { setError(''); setConfirmation('delete') }} />
           </div>
           <p className="study-help">{detail.createdAt?.toDate().toLocaleDateString('ko-KR').replace(/\.$/, '')} · {formatStudyTime(detail.studyMinutes)}</p>
           <div className="study-tags">{detail.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
@@ -183,6 +180,18 @@ function StudyContent({ userId }: { userId: string }) {
         {selected && loading && <p role="status">학습 기록을 불러오고 있습니다.</p>}
         {selected && !loading && !loadError && !detail && <section className="study-panel"><p>학습 기록을 찾을 수 없습니다.</p><a href="/study">목록으로</a></section>}
       </div>
+      <ConfirmModal open={confirmation !== null} title={confirmation === 'delete' ? '학습 기록 삭제' : '작성 취소'}
+        message={confirmation === 'delete' ? '이 학습 기록을 삭제하시겠습니까?' : '작성을 취소하고 돌아가시겠습니까? 작성 중인 내용은 저장되지 않습니다.'}
+        confirmLabel={confirmation === 'delete' ? '삭제하기' : '나가기'} destructive={confirmation === 'delete'}
+        isPending={pending} error={error} onClose={() => { if (!lock.current) { setConfirmation(null); setError('') } }}
+        onConfirm={() => {
+          if (lock.current) return
+          if (confirmation === 'cancel') { window.location.assign(detailUrl); return }
+          if (detail) void mutate(() => deleteStudyLog(detail.id), () => setCompletion({ message: '학습 기록 삭제가 완료되었습니다.', url: '/study' }))
+        }} />
+      <CompleteModal open={completion !== null} message={completion?.message} onClose={() => {
+        if (completion) window.location.assign(completion.url)
+      }} />
     </section>
   )
 }
