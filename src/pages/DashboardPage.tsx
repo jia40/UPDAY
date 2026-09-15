@@ -1,10 +1,10 @@
+import DashboardStudyCard from '../components/DashboardStudyCard'
 import DashboardTodayCard from '../components/DashboardTodayCard'
 import { useAuth } from '../hooks/useAuth'
 import { useToday } from '../hooks/useToday'
 import '../styles/dashboard.css'
 
 const cards = [
-  { id: 'study', label: 'STUDY', title: '학습 기록', symbol: '↗', metric: '연속 학습일', description: '오늘 배운 것을 남기고, 나만의 학습 흐름을 만들어보세요.', action: '학습 기록 시작하기', path: '/study' },
   { id: 'interview', label: 'INTERVIEW', title: '면접 준비', symbol: '?', metric: '복습할 질문', description: '기억하고 싶은 질문과 답변을 모아 차근차근 준비해보세요.', action: '면접 준비 시작하기', path: '/interview' },
   { id: 'job', label: 'JOB', title: '취업 지원', symbol: '→', description: '관심 있는 기업부터 면접까지, 지원 과정을 한곳에 모아보세요.', action: '취업 지원 시작하기', path: '/job' },
 ]
@@ -29,11 +29,13 @@ function DashboardPage() {
 
       <div className="dashboard__notice">
         <span aria-hidden="true">✦</span>
-        <p>오늘 할 일의 진행 상황을 확인해보세요. 학습 기록, 면접 준비, 취업 지원 기능도 준비하고 있습니다.</p>
+        <p>오늘 할 일과 연속 학습일을 확인해보세요. 면접 준비와 취업 지원 기능도 준비하고 있습니다.</p>
       </div>
 
       <div className="dashboard__grid">
         <DashboardTodayCard key={`${user?.uid}:${dateValue}`} userId={user?.uid} date={dateValue} />
+
+        <DashboardStudyCard userId={user?.uid} date={dateValue} />
 
         {cards.map((card) => (
           <section key={card.id} className={`summary-card summary-card--${card.id}`} aria-labelledby={`${card.id}-heading`}>
