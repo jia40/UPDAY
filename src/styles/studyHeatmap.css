@@ -1,0 +1,124 @@
+.study-heatmap .study-heading-row h2 {
+  margin: 0;
+}
+
+.study-heatmap__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 6px;
+}
+
+.study-heatmap__calendar {
+  display: flex;
+  gap: 4px;
+  width: max-content;
+}
+
+.study-heatmap__week, .study-heatmap__weekdays {
+  display: grid;
+  grid-template-rows: 22px repeat(7, 14px);
+  gap: 4px;
+}
+
+.study-heatmap__week {
+  width: 14px;
+}
+
+.study-heatmap__weekdays {
+  width: 24px;
+  font-size: 10px;
+  line-height: 14px;
+  color: #607066;
+}
+
+.study-heatmap__month {
+  white-space: nowrap;
+  font-size: 11px;
+  color: #607066;
+}
+
+.study-heatmap [data-level="0"] {
+  background: #edf1ee;
+}
+
+.study-heatmap [data-level="1"] {
+  background: #b8dfbc;
+}
+
+.study-heatmap [data-level="2"] {
+  background: #72bc82;
+}
+
+.study-heatmap [data-level="3"] {
+  background: #389454;
+}
+
+.study-heatmap [data-level="4"] {
+  background: #1e6036;
+}
+
+.study-panel .study-heatmap__day, .study-heatmap__swatch {
+  width: 14px;
+  height: 14px;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid #173d261a;
+  border-radius: 3px;
+}
+
+.study-panel .study-heatmap__day[aria-pressed="true"] {
+  outline: 2px solid #17211b;
+  outline-offset: 1px;
+}
+
+.study-panel .study-heatmap__day:focus-visible {
+  outline: 2px solid #2559b3;
+  outline-offset: 2px;
+  position: relative;
+  z-index: 1;
+}
+
+.study-panel .study-heatmap__day:hover {
+  box-shadow: 0 0 0 1px #17211b;
+}
+
+.study-heatmap__preview {
+  min-height: 2.8em;
+  margin: 12px 0;
+  color: #425749;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.study-heatmap__legend {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 12px;
+  color: #607066;
+}
+
+.study-heatmap__legend li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.study-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.study-filter p {
+  margin: 0;
+}
+

@@ -1,11 +1,14 @@
 import ConfirmModal from '../components/common/ConfirmModal'
 import CompleteModal from '../components/common/CompleteModal'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { FirebaseError } from 'firebase/app'
 import { useAuth } from '../hooks/useAuth'
 import { createStudyLog, deleteStudyLog, fetchStudyLogs, newStudyId, updateStudyLog, validateStudy, type StudyInput, type StudyLog } from '../lib/studyLogs'
 import StudyRecordActions from '../components/StudyRecordActions'
 import '../styles/study.css'
+import StudyHeatmap from '../components/StudyHeatmap'
+import { useToday } from '../hooks/useToday'
+import { createStudyHeatmap, studyDateKey } from '../lib/studyHeatmap'
 
 const empty: StudyInput = { title: '', content: '', tags: '', studyMinutes: '' }
 function formatStudyTime(total: number) {
@@ -23,6 +26,8 @@ function errorText(error: unknown) {
 }
 
 function StudyContent({ userId }: { userId: string }) {
+  const today = useToday()
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [logs, setLogs] = useState<StudyLog[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -52,7 +57,7 @@ function StudyContent({ userId }: { userId: string }) {
   useEffect(() => {
     let cancelled = false
     fetchStudyLogs(userId).then((items) => {
-            if (!cancelled) {
+      if (!cancelled) {
         setLogs(items); setLoading(false); setLoadError('')
         if (new URLSearchParams(window.location.search).get('edit') === '1') {
           const log = items.find((item) => item.id === selected)
@@ -69,6 +74,24 @@ function StudyContent({ userId }: { userId: string }) {
     })
     return () => { cancelled = true }
   }, [userId, retry, selected])
+
+  useEffect(() => {
+    if (formView || selected) return
+    // Normal navigation already fetches on mount; only refetch restored bfcache lists.
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted) { setLoading(true); setLoadError(''); setRetry((value) => value + 1) }
+    }
+    window.addEventListener('pageshow', restore)
+    return () => window.removeEventListener('pageshow', restore)
+  }, [formView, selected])
+
+  const datedLogs = useMemo(() => logs.map((log) => {
+    const date = log.createdAt?.toDate() ?? new Date(NaN)
+    return { log, date, key: studyDateKey(date) }
+  }), [logs])
+  const heatmap = useMemo(() => createStudyHeatmap(datedLogs.map((item) => item.date), today), [datedLogs, today])
+  const filterDate = selectedDate && selectedDate >= heatmap.days[0].date && selectedDate <= today ? selectedDate : null
+  const visibleLogs = filterDate ? datedLogs.filter((item) => item.key === filterDate).map((item) => item.log) : logs
 
   async function mutate(action: () => Promise<void>, done: () => void) {
     if (lock.current) return
@@ -126,8 +149,8 @@ function StudyContent({ userId }: { userId: string }) {
         </div>
       </header>
       {selected && !formView && <a className="study-back" href="/study">← 목록으로</a>}
-            <div className="study-grid">
-        {loadError && <div className="study-panel" role="alert"><p>{loadError}</p><button type="button" disabled={pending} onClick={() => { setLoading(true); setRetry((n) => n + 1) }}>다시 불러오기</button></div>}
+      <div className="study-grid">
+        {loadError && <div className="study-panel" role="alert"><p>{loadError}</p><button type="button" disabled={pending} onClick={() => { setLoading(true); setLoadError(''); setRetry((n) => n + 1) }}>다시 불러오기</button></div>}
         {formView && (!selected || detail) &&
         <section className="study-panel" aria-labelledby="study-form-heading">
           <h2 id="study-form-heading">{editing ? '학습 기록 수정' : '새 학습 기록'}</h2>
@@ -156,9 +179,14 @@ function StudyContent({ userId }: { userId: string }) {
           <div className="study-feedback"><p role="alert">{error}</p><p role="status">{status}</p></div>
         </section>
         }
+        {!formView && !selected && !loading && !loadError && <StudyHeatmap data={heatmap} selectedDate={filterDate} onSelect={setSelectedDate} />}
         {!formView && !selected && <section className="study-panel" aria-label="학습 기록 목록">
-          {loading ? <p role="status">학습 기록을 불러오고 있습니다.</p> : !loadError && (logs.length === 0 ? <p className="study-empty">아직 학습 기록이 없어요. 오늘 배운 내용을 남겨보세요.</p> :
-            <ul className="study-list">{logs.map((log) => <li key={log.id}>
+          {!loading && !loadError && <div className="study-filter">
+            <p role="status">{filterDate ? filterDate + ' · 학습 기록 ' + visibleLogs.length + '개' : '전체 학습 기록 ' + logs.length + '개'}</p>
+            {filterDate && <button type="button" onClick={() => setSelectedDate(null)}>필터 해제</button>}
+          </div>}
+          {loading ? <p role="status">학습 기록을 불러오고 있습니다.</p> : !loadError && (visibleLogs.length === 0 ? <p className="study-empty">{filterDate ? filterDate + '에 작성한 학습 기록이 없어요.' : '아직 학습 기록이 없어요. 오늘 배운 내용을 남겨보세요.'}</p> :
+            <ul className="study-list">{visibleLogs.map((log) => <li key={log.id}>
               <a className="study-record" href={`/study?record=${encodeURIComponent(log.id)}`}>
                 <strong>{log.title}</strong><span>{log.createdAt?.toDate().toLocaleDateString('ko-KR').replace(/\.$/, '')} · {formatStudyTime(log.studyMinutes)}</span>
                 {log.tags.length > 0 && <span className="study-tags">{log.tags.map((tag) => <span key={tag}>{tag}</span>)}</span>}
