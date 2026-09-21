@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { FirebaseError } from 'firebase/app'
-import { createUserWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth'
+import { createUserWithEmailAndPassword, signOut, updateProfile, type User } from 'firebase/auth'
 import GoogleLoginButton from '../components/auth/GoogleLoginButton'
 import { auth } from '../lib/firebase'
 import '../styles/login.css'
@@ -37,6 +37,9 @@ function SignupPage() {
   const [errors, setErrors] = useState<SignupErrors>({})
   const [isLoading, setIsLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
+  const [stage, setStage] = useState<'create' | 'profile' | 'signOut' | 'complete'>('create')
+  const createdUser = useRef<User | null>(null)
+  const submitting = useRef(false)
 
   const validateSignup = () => {
     const nextErrors: SignupErrors = {}
@@ -58,10 +61,13 @@ function SignupPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (isLoading) return
+    if (submitting.current || stage === 'complete') return
 
     setSuccessMessage('')
-    const validationErrors = validateSignup()
+    const validationErrors = stage === 'create' ? validateSignup() : {}
+    if (stage === 'profile' && name.trim().length < 2) {
+      validationErrors.name = '이름은 2자 이상 입력해주세요.'
+    }
 
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors)
@@ -69,17 +75,45 @@ function SignupPage() {
     }
 
     setErrors({})
+    submitting.current = true
     setIsLoading(true)
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password)
-      await updateProfile(userCredential.user, { displayName: name.trim() })
-      await signOut(auth)
+      if (!createdUser.current) {
+        try {
+          const credential = await createUserWithEmailAndPassword(auth, email.trim(), password)
+          createdUser.current = credential.user
+          setStage('profile')
+          setPassword('')
+          setPasswordConfirmation('')
+        } catch (error) {
+          setErrors({ form: getSignupErrorMessage(error) })
+          return
+        }
+      }
 
+      if (stage === 'create' || stage === 'profile') {
+        try {
+          await updateProfile(createdUser.current, { displayName: name.trim() })
+          setStage('signOut')
+        } catch {
+          setErrors({ form: '계정 생성은 완료되었지만 이름을 저장하지 못했습니다. 이름을 확인한 뒤 이름 저장을 다시 시도해주세요. 같은 이메일로 다시 가입할 필요는 없습니다.' })
+          return
+        }
+      }
+
+      try {
+        await signOut(auth)
+      } catch {
+        setErrors({ form: '회원가입과 이름 저장은 완료되었지만 로그아웃하지 못했습니다. 현재 로그인 상태입니다. 로그아웃을 다시 시도하면 로그인 화면으로 이동합니다.' })
+        return
+      }
+
+      setStage('complete')
       setSuccessMessage('회원가입이 완료되었습니다. 로그인 화면으로 이동합니다.')
-      window.setTimeout(() => window.location.assign('/login'), 800)
-    } catch (error) {
-      setErrors({ form: getSignupErrorMessage(error) })
+      window.location.assign('/login')
+    } finally {
+      submitting.current = false
       setIsLoading(false)
     }
   }
@@ -94,32 +128,34 @@ function SignupPage() {
           <form className="login-form signup-form" onSubmit={handleSubmit} noValidate>
             <div className="login-form__field">
               <label htmlFor="name">이름</label>
-              <input id="name" name="name" type="text" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" placeholder="이름을 입력해주세요" aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? 'name-error' : undefined} disabled={isLoading} />
+              <input id="name" name="name" type="text" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" placeholder="이름을 입력해주세요" aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? 'name-error' : undefined} disabled={isLoading || stage === 'signOut' || stage === 'complete'} />
               {errors.name && <p id="name-error" className="signup-form__error">{errors.name}</p>}
             </div>
             <div className="login-form__field">
               <label htmlFor="signup-email">이메일</label>
-              <input id="signup-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="이메일을 입력해주세요" aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'email-error' : undefined} disabled={isLoading} />
+              <input id="signup-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="이메일을 입력해주세요" aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'email-error' : undefined} disabled={isLoading || stage !== 'create'} />
               {errors.email && <p id="email-error" className="signup-form__error">{errors.email}</p>}
             </div>
             <div className="login-form__field">
               <label htmlFor="signup-password">비밀번호</label>
-              <input id="signup-password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" placeholder="8자 이상 입력해주세요" aria-invalid={Boolean(errors.password)} aria-describedby={errors.password ? 'password-error' : undefined} disabled={isLoading} />
+              <input id="signup-password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" placeholder="8자 이상 입력해주세요" aria-invalid={Boolean(errors.password)} aria-describedby={errors.password ? 'password-error' : undefined} disabled={isLoading || stage !== 'create'} />
               {errors.password && <p id="password-error" className="signup-form__error">{errors.password}</p>}
             </div>
             <div className="login-form__field">
               <label htmlFor="password-confirmation">비밀번호 확인</label>
-              <input id="password-confirmation" name="passwordConfirmation" type="password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} autoComplete="new-password" placeholder="비밀번호를 다시 입력해주세요" aria-invalid={Boolean(errors.passwordConfirmation)} aria-describedby={errors.passwordConfirmation ? 'password-confirmation-error' : undefined} disabled={isLoading} />
+              <input id="password-confirmation" name="passwordConfirmation" type="password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} autoComplete="new-password" placeholder="비밀번호를 다시 입력해주세요" aria-invalid={Boolean(errors.passwordConfirmation)} aria-describedby={errors.passwordConfirmation ? 'password-confirmation-error' : undefined} disabled={isLoading || stage !== 'create'} />
               {errors.passwordConfirmation && <p id="password-confirmation-error" className="signup-form__error">{errors.passwordConfirmation}</p>}
             </div>
             {errors.form && <p className="signup-form__message signup-form__message--error" role="alert">{errors.form}</p>}
             {successMessage && <p className="signup-form__message signup-form__message--success" role="status">{successMessage}</p>}
-            <button className="login-button" type="submit" disabled={isLoading}>{isLoading ? '가입하는 중...' : '회원가입'}</button>
+            <button className="login-button" type="submit" disabled={isLoading || stage === 'complete'}>{stage === 'complete' ? '로그인 화면으로 이동 중...' : isLoading ? '처리 중...' : stage === 'profile' ? '이름 저장 다시 시도' : stage === 'signOut' ? '로그아웃 재시도 후 로그인 화면으로 이동' : '회원가입'}</button>
           </form>
 
-          <div className="signup-divider"><span>또는</span></div>
-          <GoogleLoginButton />
-          <p className="signup-link">이미 계정이 있나요? <a href="/login">로그인</a></p>
+          {!isLoading && stage === 'create' && <>
+            <div className="signup-divider"><span>또는</span></div>
+            <GoogleLoginButton />
+            <p className="signup-link">이미 계정이 있나요? <a href="/login">로그인</a></p>
+          </>}
         </div>
       </section>
     </main>
