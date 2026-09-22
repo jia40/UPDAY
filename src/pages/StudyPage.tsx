@@ -8,7 +8,7 @@ import StudyRecordActions from '../components/StudyRecordActions'
 import '../styles/study.css'
 import StudyHeatmap from '../components/StudyHeatmap'
 import { useToday } from '../hooks/useToday'
-import { createStudyHeatmap, studyDateKey } from '../lib/studyHeatmap'
+import { createStudyHeatmap, studyDateKey, studyYears, type StudyPeriod } from '../lib/studyHeatmap'
 
 const empty: StudyInput = { title: '', content: '', tags: '', studyMinutes: '' }
 function formatStudyTime(total: number) {
@@ -28,6 +28,7 @@ function errorText(error: unknown) {
 function StudyContent({ userId }: { userId: string }) {
   const today = useToday()
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [period, setPeriod] = useState<StudyPeriod>('recent')
   const [logs, setLogs] = useState<StudyLog[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -89,8 +90,11 @@ function StudyContent({ userId }: { userId: string }) {
     const date = log.createdAt?.toDate() ?? new Date(NaN)
     return { log, date, key: studyDateKey(date) }
   }), [logs])
-  const heatmap = useMemo(() => createStudyHeatmap(datedLogs.map((item) => item.date), today), [datedLogs, today])
-  const filterDate = selectedDate && selectedDate >= heatmap.days[0].date && selectedDate <= today ? selectedDate : null
+  const dates = useMemo(() => datedLogs.map((item) => item.date), [datedLogs])
+  const years = useMemo(() => studyYears(dates, today), [dates, today])
+  const activePeriod = typeof period === 'number' && !years.includes(period) ? 'recent' : period
+  const heatmap = useMemo(() => createStudyHeatmap(dates, today, activePeriod), [dates, today, activePeriod])
+  const filterDate = selectedDate && selectedDate >= heatmap.days[0].date && selectedDate <= heatmap.days[heatmap.days.length - 1].date ? selectedDate : null
   const visibleLogs = filterDate ? datedLogs.filter((item) => item.key === filterDate).map((item) => item.log) : logs
 
   async function mutate(action: () => Promise<void>, done: () => void) {
@@ -179,7 +183,8 @@ function StudyContent({ userId }: { userId: string }) {
           <div className="study-feedback"><p role="alert">{error}</p><p role="status">{status}</p></div>
         </section>
         }
-        {!formView && !selected && !loading && !loadError && <StudyHeatmap data={heatmap} selectedDate={filterDate} onSelect={setSelectedDate} />}
+        {!formView && !selected && !loading && !loadError && <StudyHeatmap data={heatmap} selectedDate={filterDate} onSelect={setSelectedDate}
+          period={activePeriod} years={years} onPeriodChange={(value) => { setPeriod(value); setSelectedDate(null) }} />}
         {!formView && !selected && <section className="study-panel" aria-label="학습 기록 목록">
           {!loading && !loadError && <div className="study-filter">
             <p role="status">{filterDate ? filterDate + ' · 학습 기록 ' + visibleLogs.length + '개' : '전체 학습 기록 ' + logs.length + '개'}</p>
