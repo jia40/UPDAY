@@ -2,11 +2,41 @@
   margin: 0;
 }
 
+.study-heatmap__period {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.study-heatmap__period label { margin: 0; }
+
+.study-heatmap__period select {
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px;
+  border: 1px solid #dce5df;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+
+.study-heatmap__period select:focus-visible {
+  outline: 2px solid #2559b3;
+  outline-offset: 2px;
+}
+
 .study-heatmap__scroll {
   max-width: 100%;
   overflow-x: auto;
+  scrollbar-width: none;
   overscroll-behavior-x: contain;
   padding: 6px;
+}
+
+.study-heatmap__scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .study-heatmap__calendar {
@@ -83,9 +113,17 @@
   box-shadow: 0 0 0 1px #17211b;
 }
 
+.study-heatmap__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+}
+
 .study-heatmap__preview {
-  min-height: 2.8em;
-  margin: 12px 0;
+  margin: 0;
   color: #425749;
   font-size: 13px;
   line-height: 1.4;
