@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchStudyLogs } from '../lib/studyLogs'
 import { calculateStudyStreak, type StudyStreak } from '../lib/studyStreak'
+import { studyLogDate } from '../lib/studyAnalytics'
 
 // Remount on account/date changes, preventing the previous summary from appearing.
 export default function DashboardStudyCard({ userId, date }: { userId?: string; date: string }) {
@@ -21,7 +22,7 @@ function StudySummary({ userId, date }: { userId?: string; date: string }) {
       try {
         const logs = await fetchStudyLogs(userId)
         if (!active || current !== requestId) return
-        setSummary(calculateStudyStreak(logs.map((log) => log.createdAt.toDate()), date))
+        setSummary(calculateStudyStreak(logs.map(studyLogDate), date))
         setError(false)
       } catch {
         if (active && current === requestId) setError(true)
