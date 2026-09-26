@@ -2,13 +2,28 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /studyLogs/{logId} {
+      function calendarDate(value) {
+        let parts = value.split('-');
+        let year = int(parts[0]);
+        let month = int(parts[1]);
+        let day = int(parts[2]);
+        let date = timestamp.date(year, month, day);
+        // UTC+14 is the latest possible local date. The client applies its own
+        // local-today limit; rules cannot infer the user's device time zone.
+        return year >= 1 && date.year() == year && date.month() == month && date.day() == day
+          && date <= (request.time + duration.value(14, 'h')).date();
+      }
+      function validStudyDate(value) {
+        return value is string && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && calendarDate(value);
+      }
       function owner() { return request.auth != null && resource.data.userId == request.auth.uid; }
       function tagValid(tags, i) {
         return tags.size() <= i || (tags[i] is string && tags[i].size() > 0 && tags[i].size() <= 30 && tags[i].matches('.*[^\\s].*'));
       }
       function valid(data) {
         return data.keys().hasAll(['userId', 'title', 'content', 'tags', 'studyMinutes', 'createdAt'])
-          && data.keys().hasOnly(['userId', 'title', 'content', 'tags', 'studyMinutes', 'createdAt'])
+          && data.keys().hasOnly(['userId', 'title', 'content', 'tags', 'studyMinutes', 'createdAt', 'studyDate'])
+          && (!('studyDate' in data) || validStudyDate(data.studyDate))
           && data.userId == request.auth.uid
           && data.title is string && data.title.size() > 0 && data.title.size() <= 100 && data.title.matches('.*[^\\s].*')
           && data.content is string && data.content.size() > 0 && data.content.size() <= 10000 && data.content.matches('[\\s\\S]*[^\\s][\\s\\S]*')
@@ -19,9 +34,11 @@ service cloud.firestore {
           && tagValid(data.tags, 5) && tagValid(data.tags, 6) && tagValid(data.tags, 7) && tagValid(data.tags, 8) && tagValid(data.tags, 9);
       }
       allow read, delete: if owner();
-      allow create: if request.auth != null && valid(request.resource.data) && request.resource.data.createdAt == request.time;
+      allow create: if request.auth != null && valid(request.resource.data)
+        && request.resource.data.keys().hasAll(['studyDate']) && request.resource.data.createdAt == request.time;
       allow update: if owner() && valid(request.resource.data)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content', 'tags', 'studyMinutes']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content', 'tags', 'studyMinutes', 'studyDate'])
+        && (!('studyDate' in resource.data) || request.resource.data.keys().hasAll(['studyDate']));
     }
     match /todos/{todoId} {
       function signedIn() { return request.auth != null; }

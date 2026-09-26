@@ -7,15 +7,12 @@ import { createStudyLog, deleteStudyLog, fetchStudyLogs, newStudyId, updateStudy
 import StudyRecordActions from '../components/StudyRecordActions'
 import '../styles/study.css'
 import StudyHeatmap from '../components/StudyHeatmap'
+import StudyWeeklyStats from '../components/StudyWeeklyStats'
+import { effectiveStudyDate, filterStudyLogs, formatStudyTime, studyLogDate } from '../lib/studyAnalytics'
 import { useToday } from '../hooks/useToday'
-import { createStudyHeatmap, studyDateKey, studyYears, type StudyPeriod } from '../lib/studyHeatmap'
+import { createStudyHeatmap, studyYears, type StudyPeriod } from '../lib/studyHeatmap'
 
-const empty: StudyInput = { title: '', content: '', tags: '', studyMinutes: '' }
-function formatStudyTime(total: number) {
-  const hours = Math.floor(total / 60)
-  const minutes = total % 60
-  return [hours ? `${hours}시간` : '', minutes ? `${minutes}분` : ''].filter(Boolean).join(' ') || '0분'
-}
+const empty: StudyInput = { title: '', content: '', tags: '', studyMinutes: '', studyDate: '' }
 function errorText(error: unknown) {
   if (error instanceof FirebaseError) {
     return error.code === 'permission-denied'
@@ -28,6 +25,7 @@ function errorText(error: unknown) {
 function StudyContent({ userId }: { userId: string }) {
   const today = useToday()
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [selectedTag, setSelectedTag] = useState('')
   const [period, setPeriod] = useState<StudyPeriod>('recent')
   const [logs, setLogs] = useState<StudyLog[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,7 +36,7 @@ function StudyContent({ userId }: { userId: string }) {
   const [confirmation, setConfirmation] = useState<'delete' | 'cancel' | null>(null)
   const [completion, setCompletion] = useState<{ message: string; url: string } | null>(null)
   const [retry, setRetry] = useState(0)
-  const [input, setInput] = useState<StudyInput>(empty)
+  const [input, setInput] = useState<StudyInput>(() => ({ ...empty, studyDate: today }))
   const [hours, setHours] = useState('')
   const [minutes, setMinutes] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
@@ -64,7 +62,7 @@ function StudyContent({ userId }: { userId: string }) {
           const log = items.find((item) => item.id === selected)
           if (log) {
             setEditing(log.id)
-            setInput({ title: log.title, content: log.content, tags: log.tags.join(', '), studyMinutes: String(log.studyMinutes) })
+            setInput({ title: log.title, content: log.content, tags: log.tags.join(', '), studyMinutes: String(log.studyMinutes), studyDate: effectiveStudyDate(log) ?? '' })
             setHours(String(Math.floor(log.studyMinutes / 60)))
             setMinutes(String(log.studyMinutes % 60))
           }
@@ -86,16 +84,14 @@ function StudyContent({ userId }: { userId: string }) {
     return () => window.removeEventListener('pageshow', restore)
   }, [formView, selected])
 
-  const datedLogs = useMemo(() => logs.map((log) => {
-    const date = log.createdAt?.toDate() ?? new Date(NaN)
-    return { log, date, key: studyDateKey(date) }
-  }), [logs])
-  const dates = useMemo(() => datedLogs.map((item) => item.date), [datedLogs])
+  const dates = useMemo(() => logs.map(studyLogDate), [logs])
   const years = useMemo(() => studyYears(dates, today), [dates, today])
   const activePeriod = typeof period === 'number' && !years.includes(period) ? 'recent' : period
   const heatmap = useMemo(() => createStudyHeatmap(dates, today, activePeriod), [dates, today, activePeriod])
   const filterDate = selectedDate && selectedDate >= heatmap.days[0].date && selectedDate <= heatmap.days[heatmap.days.length - 1].date ? selectedDate : null
-  const visibleLogs = filterDate ? datedLogs.filter((item) => item.key === filterDate).map((item) => item.log) : logs
+  const tags = useMemo(() => [...new Set(logs.flatMap((log) => log.tags))].sort((a, b) => a.localeCompare(b, 'ko')), [logs])
+  const filterTag = tags.includes(selectedTag) ? selectedTag : ''
+  const visibleLogs = filterStudyLogs(logs, filterDate, filterTag)
 
   async function mutate(action: () => Promise<void>, done: () => void) {
     if (lock.current) return
@@ -160,6 +156,9 @@ function StudyContent({ userId }: { userId: string }) {
           <h2 id="study-form-heading">{editing ? '학습 기록 수정' : '새 학습 기록'}</h2>
           <form onSubmit={submit} noValidate>
             <fieldset disabled={blocked}>
+              <label htmlFor="study-date">학습 날짜 *</label>
+              <input id="study-date" type="date" required min="0001-01-01" max={today} value={input.studyDate} onChange={(e) => setInput({ ...input, studyDate: e.target.value })} aria-describedby="study-date-help" />
+              <p id="study-date-help" className="study-help">실제로 공부한 날짜를 선택해주세요. 오늘과 지난 날짜를 기록할 수 있습니다.</p>
               <label htmlFor="study-title">제목 *</label>
               <input ref={titleRef} id="study-title" required value={input.title} maxLength={100} onChange={(e) => setInput({ ...input, title: e.target.value })} placeholder="오늘 무엇을 배웠나요?" />
               <label htmlFor="study-content">학습 내용 *</label>
@@ -185,15 +184,17 @@ function StudyContent({ userId }: { userId: string }) {
         }
         {!formView && !selected && !loading && !loadError && <StudyHeatmap data={heatmap} selectedDate={filterDate} onSelect={setSelectedDate}
           period={activePeriod} years={years} onPeriodChange={(value) => { setPeriod(value); setSelectedDate(null) }} />}
+        {!formView && !selected && !loading && !loadError && <StudyWeeklyStats logs={logs} today={today} />}
         {!formView && !selected && <section className="study-panel" aria-label="학습 기록 목록">
           {!loading && !loadError && <div className="study-filter">
-            <p role="status">{filterDate ? filterDate + ' · 학습 기록 ' + visibleLogs.length + '개' : '전체 학습 기록 ' + logs.length + '개'}</p>
-            {filterDate && <button type="button" onClick={() => setSelectedDate(null)}>필터 해제</button>}
+            <div className="study-tag-filter"><label htmlFor="study-tag-filter">태그 필터</label><select id="study-tag-filter" value={filterTag} onChange={(e) => setSelectedTag(e.target.value)}><option value="">전체 태그</option>{tags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}</select></div>
+            <p role="status">{filterDate || filterTag ? [filterDate, filterTag, '학습 기록 ' + visibleLogs.length + '개'].filter(Boolean).join(' · ') : '전체 학습 기록 ' + logs.length + '개'}</p>
+            {(filterDate || filterTag) && <button type="button" onClick={() => { setSelectedDate(null); setSelectedTag('') }}>필터 해제</button>}
           </div>}
-          {loading ? <p role="status">학습 기록을 불러오고 있습니다.</p> : !loadError && (visibleLogs.length === 0 ? <p className="study-empty">{filterDate ? filterDate + '에 작성한 학습 기록이 없어요.' : '아직 학습 기록이 없어요. 오늘 배운 내용을 남겨보세요.'}</p> :
+          {loading ? <p role="status">학습 기록을 불러오고 있습니다.</p> : !loadError && (visibleLogs.length === 0 ? <p className="study-empty">{filterDate || filterTag ? '선택한 조건에 맞는 학습 기록이 없어요. 필터를 해제해보세요.' : '아직 학습 기록이 없어요. 오늘 배운 내용을 남겨보세요.'}</p> :
             <ul className="study-list">{visibleLogs.map((log) => <li key={log.id}>
               <a className="study-record" href={`/study?record=${encodeURIComponent(log.id)}`}>
-                <strong>{log.title}</strong><span>{log.createdAt?.toDate().toLocaleDateString('ko-KR').replace(/\.$/, '')} · {formatStudyTime(log.studyMinutes)}</span>
+                <strong>{log.title}</strong><span>{effectiveStudyDate(log) ?? '날짜 없음'} · {formatStudyTime(log.studyMinutes)}</span>
                 {log.tags.length > 0 && <span className="study-tags">{log.tags.map((tag) => <span key={tag}>{tag}</span>)}</span>}
               </a>
             </li>)}</ul>)}
@@ -205,7 +206,7 @@ function StudyContent({ userId }: { userId: string }) {
               onEdit={() => window.location.assign(`${detailUrl}&edit=1`)}
               onDelete={() => { setError(''); setConfirmation('delete') }} />
           </div>
-          <p className="study-help">{detail.createdAt?.toDate().toLocaleDateString('ko-KR').replace(/\.$/, '')} · {formatStudyTime(detail.studyMinutes)}</p>
+          <p className="study-help">{effectiveStudyDate(detail) ?? '날짜 없음'} · {formatStudyTime(detail.studyMinutes)}</p>
           <div className="study-tags">{detail.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
           <p className="study-content">{detail.content}</p>
           <div className="study-feedback"><p role="alert">{error}</p><p role="status">{status}</p></div>

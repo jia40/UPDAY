@@ -37,7 +37,7 @@ function mount({ records = ['2024-02-29', '2025-12-31'], fail = false, today = '
         return logs
       } }
       if (id.includes('Modal') || id.endsWith('/StudyRecordActions')) return { __esModule: true, default: () => null }
-      if (id.startsWith('.')) return load(new URL(id + (id.endsWith('/StudyHeatmap') ? '.tsx' : '.ts'), url).href)
+      if (id.startsWith('.')) return load(new URL(id + (['/StudyHeatmap', '/StudyWeeklyStats'].some((name) => id.endsWith(name)) ? '.tsx' : '.ts'), url).href)
       return require(id)
     })
     cache.set(url.href, exports)
