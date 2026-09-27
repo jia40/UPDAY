@@ -130,7 +130,6 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
     <section className="today-page" aria-labelledby="today-heading">
       <header><p className="today-eyebrow"><span className="today-label">TODAY</span><time dateTime={date}>{date.replaceAll('-', '. ')}</time></p><div className="today-heading-row"><h1 id="today-heading">To do list</h1></div></header>
       <div className="today-date-controls">
-        <label htmlFor="todo-date">조회 날짜</label>
         <input id="todo-date" type="date" value={date} min="0001-01-01" max={today} disabled={pending || carryConfirm || deleteTarget !== null} onChange={(event) => {
           const value = event.target.value
           if (event.target.validity.valid && value && value <= today) onDateChange(value)
