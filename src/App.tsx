@@ -1,3 +1,4 @@
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import MainLayout from './components/common/MainLayout'
 import { mainPages } from './lib/navigation'
 import ComingSoonPage from './pages/ComingSoonPage'
@@ -10,6 +11,7 @@ import InterviewPage from './pages/InterviewPage'
 
 function App() {
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (pathname === '/reset-password') return <ResetPasswordPage />
   if (pathname === '/signup') return <SignupPage />
   if (pathname === '/' || pathname === '/login') return <LoginPage />
 

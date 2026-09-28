@@ -97,6 +97,7 @@ function LoginPage() {
             {errors.form && <p className="login-form__message" role="alert">{errors.form}</p>}
             <button className="login-button" type="submit" disabled={isLoading}>{isLoading ? '로그인 중...' : '로그인'}</button>
           </form>
+          <p className="signup-link"><a href="/reset-password">비밀번호를 잊으셨나요?</a></p>
           <p className="signup-link">
             계정이 없으신가요? <a href="/signup">회원가입으로 가기</a>
           </p>
