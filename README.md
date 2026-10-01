@@ -207,7 +207,7 @@ Production Deploy
 ### Example
 
 ```text
-feature: Google 로그인 구현
+feature: 비밀번호 재설정 기능 구현
 feature: 학습 기록 등록 기능 추가
 fix: 로그인 실패 시 에러 처리
 refactor: 인증 상태 로직을 useAuth로 분리
@@ -221,7 +221,6 @@ docs: README 프로젝트 소개 추가
 ### Phase 1 — MVP
 
 * [ ] Firebase 연결
-* [ ] Google 로그인
 * [ ] 인증 상태 관리
 * [ ] Todo CRUD
 * [ ] Study Log CRUD
@@ -334,7 +333,6 @@ Firebase CLI를 사용하는 경우 프로젝트를 명시하여 `firebase deplo
 - 이메일 앞뒤 공백과 형식을 검증한 뒤 `sendPasswordResetEmail(auth, email)`을 호출합니다. 요청 중 입력·제출을 비활성화하고 중복 요청을 막습니다.
 - 성공과 `auth/user-not-found`에는 동일한 완료 문구를 표시합니다. 계정 조회 API로 가입 여부를 확인하지 않습니다. 네트워크·요청 횟수 초과 오류는 입력을 유지하고 재시도를 지원합니다.
 - 새 비밀번호 입력은 Firebase 기본 이메일 작업 페이지에서 처리합니다. `/reset-password`는 메일 요청 전용으로, 재설정 링크의 작업 URL로 설정하면 안 됩니다.
-- Google 전용 계정은 Google 계정 복구를 이용하도록 안내합니다.
 
 ### Firebase 콘솔 및 실제 메일 확인
 

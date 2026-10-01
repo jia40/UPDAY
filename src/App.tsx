@@ -1,4 +1,5 @@
 import ResetPasswordPage from './pages/ResetPasswordPage'
+import GuestOnly from './components/auth/GuestOnly'
 import MainLayout from './components/common/MainLayout'
 import { mainPages } from './lib/navigation'
 import ComingSoonPage from './pages/ComingSoonPage'
@@ -12,8 +13,8 @@ import InterviewPage from './pages/InterviewPage'
 function App() {
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
   if (pathname === '/reset-password') return <ResetPasswordPage />
-  if (pathname === '/signup') return <SignupPage />
-  if (pathname === '/' || pathname === '/login') return <LoginPage />
+  if (pathname === '/signup') return <GuestOnly><SignupPage /></GuestOnly>
+  if (pathname === '/' || pathname === '/login') return <GuestOnly><LoginPage /></GuestOnly>
 
   const page = mainPages.find(({ path }) => path === pathname)
   if (page || pathname === '/mypage') {

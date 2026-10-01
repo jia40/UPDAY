@@ -39,7 +39,6 @@ function mount(page = 'SignupPage', failures = {}) {
     if (id === 'firebase/app') return { FirebaseError }
     if (id === '../lib/firebase') return { auth }
     if (id.endsWith('.css')) return {}
-    if (id.includes('GoogleLoginButton')) return { __esModule: true, default: () => null }
     return require(id)
   }, { location: { assign: (path) => calls.navigate.push(path) } })
   const view = render(createElement(exports.default))
