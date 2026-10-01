@@ -1,7 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { FirebaseError } from 'firebase/app'
 import { createUserWithEmailAndPassword, signOut, updateProfile, type User } from 'firebase/auth'
-import GoogleLoginButton from '../components/auth/GoogleLoginButton'
 import { auth } from '../lib/firebase'
 import '../styles/login.css'
 import '../styles/signup.css'
@@ -152,8 +151,6 @@ function SignupPage() {
           </form>
 
           {!isLoading && stage === 'create' && <>
-            <div className="signup-divider"><span>또는</span></div>
-            <GoogleLoginButton />
             <p className="signup-link">이미 계정이 있나요? <a href="/login">로그인</a></p>
           </>}
         </div>
