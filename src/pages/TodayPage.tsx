@@ -1,6 +1,6 @@
 import ConfirmModal from '../components/common/ConfirmModal'
 import CompleteModal from '../components/common/CompleteModal'
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { FirebaseError } from 'firebase/app'
 import { useAuth } from '../hooks/useAuth'
 import { useToday } from '../hooks/useToday'
@@ -72,6 +72,8 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
   const [todos, setTodos] = useState<Todo[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+  const [carryLoading, setCarryLoading] = useState(history)
+  const [carryError, setCarryError] = useState('')
   const [error, setError] = useState('')
   const [title, setTitle] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
@@ -83,16 +85,30 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
   const lock = useRef(false)
   const alive = useRef(true)
   const createId = useRef<string | null>(null)
+  const refresh = useCallback(async (isActive: () => boolean, saved = false) => {
+    await Promise.all([
+      fetchTodos(userId, date).then((items) => {
+        if (isActive()) { setTodos(items); setLoadError('') }
+      }).catch((reason: unknown) => {
+        if (isActive()) setLoadError(`${saved ? '저장은 완료했지만 목록을 갱신하지 못했습니다. ' : ''}${message(reason)}`)
+      }).finally(() => { if (isActive()) setLoading(false) }),
+      (history ? fetchCarriedTodoIds(userId, today) : Promise.resolve(new Set<string>())).then((ids) => {
+        if (isActive()) { setCarried(ids); setCarryError('') }
+      }).catch(() => {
+        if (isActive()) {
+          setCarried(new Set())
+          setCarryError('이월 기록을 확인하지 못해 오늘로 가져오기를 사용할 수 없습니다. 목록을 새로고침해주세요.')
+          setSelected([])
+        }
+      }).finally(() => { if (isActive()) setCarryLoading(false) }),
+    ])
+  }, [userId, date, today, history])
   useEffect(() => {
     alive.current = true
     let cancelled = false
-    Promise.all([fetchTodos(userId, date), history ? fetchCarriedTodoIds(userId, today) : Promise.resolve(new Set<string>())]).then(([items, ids]) => {
-      if (!cancelled) { setTodos(items); setCarried(ids); setSelected([]); setLoadError(''); setLoading(false) }
-    }).catch((reason: unknown) => {
-      if (!cancelled) { setLoadError(message(reason)); setLoading(false) }
-    })
+    void refresh(() => !cancelled)
     return () => { cancelled = true; alive.current = false }
-  }, [userId, date, today, history, retry])
+  }, [refresh, retry])
 
   async function run(action: () => Promise<void>, after?: () => void) {
     if (lock.current) return
@@ -104,12 +120,7 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
       await action()
       if (!alive.current) return
       after?.()
-      try {
-        const [items, ids] = await Promise.all([fetchTodos(userId, date), history ? fetchCarriedTodoIds(userId, today) : Promise.resolve(new Set<string>())])
-        if (alive.current) { setTodos(items); setCarried(ids); setLoadError('') }
-      } catch (reason) {
-        if (alive.current) setLoadError(`저장은 완료했지만 목록을 갱신하지 못했습니다. ${message(reason)}`)
-      }
+      await refresh(() => alive.current, true)
     } catch (reason) {
       if (alive.current) setError(message(reason))
     } finally {
@@ -126,6 +137,10 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
   const completed = todos.filter((todo) => todo.completed).length
   const progress = todos.length ? Math.round(completed / todos.length * 100) : 0
   const unavailable = loading || Boolean(loadError)
+  const carryUnavailable = unavailable || carryLoading || Boolean(carryError)
+  function retryLoad() {
+    setSelected([]); setLoading(true); setCarryLoading(history); setRetry((value) => value + 1)
+  }
   return (
     <section className="today-page" aria-labelledby="today-heading">
       <header><p className="today-eyebrow"><span className="today-label">TODAY</span><time dateTime={date}>{date.replaceAll('-', '. ')}</time></p><div className="today-heading-row"><h1 id="today-heading">To do list</h1></div></header>
@@ -145,16 +160,18 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
         </form>}
         {history && <div className="today-carry-controls">
           <span role="status">{selected.length}개 선택</span>
-          <button type="button" disabled={unavailable || pending} onClick={() => { setSelected([]); setLoading(true); setRetry((value) => value + 1) }}>목록 새로고침</button>
-          <button type="button" disabled={unavailable || pending || selected.length === 0} onClick={() => { setError(''); setCarryConfirm(true) }}>오늘로 가져오기</button>
+          <button type="button" disabled={loading || carryLoading || pending} onClick={retryLoad}>목록 새로고침</button>
+          <button type="button" disabled={carryUnavailable || pending || selected.length === 0} onClick={() => { setError(''); setCarryConfirm(true) }}>오늘로 가져오기</button>
         </div>}
+        {history && carryLoading && <p role="status">이월 기록을 확인하고 있습니다...</p>}
+        {history && !carryLoading && carryError && <p className="today-error" role="alert">{carryError}</p>}
         <p className="today-error today-action-error" role="alert">{error}</p>
         <p className="today-save-status" role="status">{pending ? '저장하고 있습니다. 연결이 끊겼다면 다시 연결될 때까지 기다려주세요.' : ''}</p>
-        {loading ? <p role="status">할 일을 불러오고 있습니다...</p> : loadError ? <div role="alert"><p className="today-error">{loadError}</p><button type="button" disabled={pending} onClick={() => { setLoading(true); setRetry((value) => value + 1) }}>다시 불러오기</button></div> : todos.length === 0 ? <div className="today-empty"><strong>{history ? '이 날짜에 등록한 할 일이 없어요.' : '아직 등록한 할 일이 없어요.'}</strong>{!history && <p>오늘 할 일을 하나 추가해보세요.</p>}</div> : (
+        {loading ? <p role="status">할 일을 불러오고 있습니다...</p> : loadError ? <div role="alert"><p className="today-error">{loadError}</p><button type="button" disabled={pending || carryLoading} onClick={retryLoad}>다시 불러오기</button></div> : todos.length === 0 ? <div className="today-empty"><strong>{history ? '이 날짜에 등록한 할 일이 없어요.' : '아직 등록한 할 일이 없어요.'}</strong>{!history && <p>오늘 할 일을 하나 추가해보세요.</p>}</div> : (
           <ul className="todo-list" tabIndex={0} aria-label="선택한 날짜의 할 일 목록">{todos.map((todo) => <li key={todo.id}>
             {history ? <>
-              <label className="todo-check"><input type="checkbox" aria-label={`${todo.title} 이월 선택`} checked={selected.includes(todo.id)} disabled={pending || todo.completed || carried.has(todo.id)} onChange={(event) => setSelected((ids) => event.target.checked ? [...ids, todo.id] : ids.filter((id) => id !== todo.id))} /><span className={todo.completed ? 'todo-completed' : ''}>{todo.title}</span></label>
-              <span className="todo-history-status">{carried.has(todo.id) ? '오늘로 이월됨' : todo.completed ? '완료' : '미완료'}</span>
+              <label className="todo-check"><input type="checkbox" aria-label={`${todo.title} 이월 선택`} checked={selected.includes(todo.id)} disabled={carryUnavailable || pending || todo.completed || carried.has(todo.id)} onChange={(event) => setSelected((ids) => event.target.checked ? [...ids, todo.id] : ids.filter((id) => id !== todo.id))} /><span className={todo.completed ? 'todo-completed' : ''}>{todo.title}</span></label>
+              <span className="todo-history-status">{todo.completed ? '완료' : carryLoading || carryError ? '이월 여부 확인 필요' : carried.has(todo.id) ? '오늘로 이월됨' : '미완료'}</span>
             </> : editing === todo.id ? <form className="todo-edit" onSubmit={(event) => { event.preventDefault(); void run(() => renameTodo(todo.id, draft), () => setEditing(null)) }}>
               <label htmlFor={`edit-${todo.id}`}>할 일 수정</label><input id={`edit-${todo.id}`} autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={100} disabled={pending} />
               <div className="todo-actions"><button disabled={pending} type="submit">저장</button><button disabled={pending} type="button" onClick={() => { setEditing(null); setError('') }}>취소</button></div>
@@ -170,7 +187,7 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
       <p className="today-note">지난 날짜는 조회만 가능합니다. 미완료 항목을 선택해 오늘로 가져오면 원본을 보관하고 새 할 일을 만듭니다. 자동 이월되지 않으며, 오늘로 가져온 항목을 삭제해도 같은 날 다시 이월할 수 없습니다.</p>
       <ConfirmModal open={carryConfirm} title="오늘로 가져오기" message={`선택한 ${selected.length}개 항목을 오늘 할 일로 가져올까요? 지난 기록은 그대로 유지됩니다.`} confirmLabel="가져오기" isPending={pending} error={error}
         onClose={() => { if (!lock.current) { setCarryConfirm(false); setError('') } }}
-        onConfirm={() => void run(() => carryTodos(userId, selected), () => { setSelected([]); setCarryConfirm(false); setCarryComplete(true) })} />
+        onConfirm={() => { if (!carryUnavailable) void run(() => carryTodos(userId, selected), () => { setSelected([]); setCarryConfirm(false); setCarryComplete(true) }) }} />
       <CompleteModal open={carryComplete} message="선택한 항목을 오늘로 가져왔습니다. 이미 이월한 항목은 중복 생성하지 않았습니다." onClose={() => { setCarryComplete(false); onDateChange(today) }} />
       <ConfirmModal open={deleteTarget !== null} title="할 일 삭제" message={deleteTarget ? '“' + deleteTarget.title + '” 할 일을 삭제하시겠습니까?' : ''}
         confirmLabel="삭제하기" destructive isPending={pending} error={error}
