@@ -39,6 +39,9 @@ function StudyContent({ userId }: { userId: string }) {
   const [input, setInput] = useState<StudyInput>(() => ({ ...empty, studyDate: today }))
   const [hours, setHours] = useState('')
   const [minutes, setMinutes] = useState('')
+  const [initialForm, setInitialForm] = useState(() => ({ ...empty, studyDate: today, hours: '', minutes: '' }))
+  const [leaveUrl, setLeaveUrl] = useState<string | null>(null)
+  const allowLeave = useRef(false)
   const [editing, setEditing] = useState<string | null>(null)
   const params = new URLSearchParams(window.location.search)
   const selected = params.get('record')
@@ -65,6 +68,7 @@ function StudyContent({ userId }: { userId: string }) {
             setInput({ title: log.title, content: log.content, tags: log.tags.join(', '), studyMinutes: String(log.studyMinutes), studyDate: effectiveStudyDate(log) ?? '' })
             setHours(String(Math.floor(log.studyMinutes / 60)))
             setMinutes(String(log.studyMinutes % 60))
+            setInitialForm({ title: log.title, content: log.content, tags: log.tags.join(', '), studyMinutes: String(log.studyMinutes), studyDate: effectiveStudyDate(log) ?? '', hours: String(Math.floor(log.studyMinutes / 60)), minutes: String(log.studyMinutes % 60) })
           }
         }
       }
@@ -73,6 +77,48 @@ function StudyContent({ userId }: { userId: string }) {
     })
     return () => { cancelled = true }
   }, [userId, retry, selected])
+
+  const dirty = JSON.stringify({ ...input, hours, minutes }) !== JSON.stringify(initialForm)
+  const protectChanges = formView && !loading && !completion && (dirty || pending)
+  useEffect(() => {
+    if (!protectChanges) return
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (allowLeave.current) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    const followLink = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null
+      if (!(link instanceof HTMLAnchorElement) || link.hasAttribute('download') || (link.target && link.target !== '_self')) return
+      const url = new URL(link.href, window.location.href)
+      if (url.origin !== window.location.origin || !['http:', 'https:'].includes(url.protocol)) return
+      if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (lock.current) return
+      setLeaveUrl(url.href)
+      setError('')
+      setConfirmation('cancel')
+    }
+    const restore = () => { allowLeave.current = false }
+    window.addEventListener('beforeunload', beforeUnload)
+    window.addEventListener('pageshow', restore)
+    document.addEventListener('click', followLink, true)
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnload)
+      window.removeEventListener('pageshow', restore)
+      document.removeEventListener('click', followLink, true)
+    }
+  }, [protectChanges])
+
+  function cancelForm() {
+    if (lock.current) return
+    if (!dirty) { window.location.assign(detailUrl); return }
+    setLeaveUrl(detailUrl)
+    setError('')
+    setConfirmation('cancel')
+  }
 
   useEffect(() => {
     if (formView || selected) return
@@ -176,7 +222,7 @@ function StudyContent({ userId }: { userId: string }) {
               <label htmlFor="study-tags">태그 (선택)</label>
               <input id="study-tags" value={input.tags} onChange={(e) => setInput({ ...input, tags: e.target.value })} placeholder="React, JavaScript, CS" aria-describedby="study-tags-help" />
               <p id="study-tags-help" className="study-help">쉼표로 구분해주세요. 태그당 30자, 최대 10개까지 입력할 수 있습니다.</p>
-              <div className="study-actions"><button className="study-primary" type="submit">{editing ? '수정 저장' : '기록 저장'}</button><button type="button" onClick={() => { setError(''); setConfirmation('cancel') }}>취소</button></div>
+              <div className="study-actions"><button className="study-primary" type="submit">{editing ? '수정 저장' : '기록 저장'}</button><button type="button" onClick={cancelForm}>취소</button></div>
             </fieldset>
           </form>
           <div className="study-feedback"><p role="alert">{error}</p><p role="status">{status}</p></div>
@@ -216,11 +262,11 @@ function StudyContent({ userId }: { userId: string }) {
       </div>
       <ConfirmModal open={confirmation !== null} title={confirmation === 'delete' ? '학습 기록 삭제' : '작성 취소'}
         message={confirmation === 'delete' ? '이 학습 기록을 삭제하시겠습니까?' : '작성을 취소하고 돌아가시겠습니까? 작성 중인 내용은 저장되지 않습니다.'}
-        confirmLabel={confirmation === 'delete' ? '삭제하기' : '나가기'} destructive={confirmation === 'delete'}
+        confirmLabel={confirmation === 'delete' ? '삭제하기' : '나가기'} cancelLabel={confirmation === 'delete' ? '취소' : '계속 작성'} destructive={confirmation === 'delete'}
         isPending={pending} error={error} onClose={() => { if (!lock.current) { setConfirmation(null); setError('') } }}
         onConfirm={() => {
           if (lock.current) return
-          if (confirmation === 'cancel') { window.location.assign(detailUrl); return }
+          if (confirmation === 'cancel') { allowLeave.current = true; window.location.assign(leaveUrl ?? detailUrl); return }
           if (detail) void mutate(() => deleteStudyLog(detail.id), () => setCompletion({ message: '학습 기록 삭제가 완료되었습니다.', url: '/study' }))
         }} />
       <CompleteModal open={completion !== null} message={completion?.message} onClose={() => {
