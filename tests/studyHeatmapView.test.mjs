@@ -18,7 +18,7 @@ afterEach(cleanup)
 function mount({ records = ['2024-02-29', '2025-12-31'], fail = false, today = '2026-09-21' } = {}) {
   let date = today
   let requests = 0
-  const logs = records.map((date, index) => ({ id: String(index), title: '기록 ' + date, tags: [], studyMinutes: 10, createdAt: { toDate: () => new Date(date + 'T12:00:00') } }))
+  const logs = records.map((date, index) => ({ id: String(index), studyDate: date, title: '기록 ' + date, tags: [], studyMinutes: 10, createdAt: { toDate: () => new Date(date + 'T12:00:00') } }))
   const cache = new Map()
   function load(path) {
     const url = new URL(path, import.meta.url)
@@ -30,14 +30,14 @@ function mount({ records = ['2024-02-29', '2025-12-31'], fail = false, today = '
       if (id.endsWith('.css')) return {}
       if (id.endsWith('/useAuth')) return { useAuth: () => ({ user: { uid: 'owner' }, isLoading: false }) }
       if (id.endsWith('/useToday')) return { useToday: () => date }
-      if (id.endsWith('/studyLogs')) return { fetchStudyLogs: async (userId) => {
+      if (id.endsWith('/studyLogs')) return { fetchStudyOverview: async (userId) => {
         assert.equal(userId, 'owner')
         requests++
         if (fail) throw new Error('조회 실패')
         return logs
-      } }
+      }, fetchStudyPage: async (_userId, date) => ({ items: logs.filter(log => !date || log.studyDate === date), hasMore: false }) }
       if (id.includes('Modal') || id.endsWith('/StudyRecordActions')) return { __esModule: true, default: () => null }
-      if (id.startsWith('.')) return load(new URL(id + (['/StudyHeatmap', '/StudyWeeklyStats'].some((name) => id.endsWith(name)) ? '.tsx' : '.ts'), url).href)
+      if (id.startsWith('.')) return load(new URL(id + (['/StudyHeatmap', '/StudyWeeklyStats', '/StudyRecordList'].some((name) => id.endsWith(name)) ? '.tsx' : '.ts'), url).href)
       return require(id)
     })
     cache.set(url.href, exports)
@@ -45,7 +45,7 @@ function mount({ records = ['2024-02-29', '2025-12-31'], fail = false, today = '
   }
   const Page = load('../src/pages/StudyPage.tsx').default
   const view = render(createElement(Page))
-  return { ...view, requests: () => requests, changePeriod: (period) => fireEvent.change(view.getByLabelText('기간'), { target: { value: period } }),
+  return { ...view, requests: () => requests, changePeriod: async (period) => act(async () => fireEvent.change(view.getByLabelText('기간'), { target: { value: period } })),
     setToday: (next) => { date = next; view.rerender(createElement(Page)) } }
 }
 
@@ -59,22 +59,22 @@ test('period changes reuse fetched logs and clear date filters without filtering
   fireEvent.mouseEnter(day)
   act(() => day.focus())
   assert.equal(preview.textContent, '날짜를 선택하면 기록 개수를 확인할 수 있어요.')
-  fireEvent.click(day)
+  await act(async () => fireEvent.click(day))
   assert.equal(preview.textContent, '2025-12-31 · 학습 기록 1개')
   const otherDay = view.getByRole('button', { name: '2026-01-01 · 학습 기록 0개' })
   fireEvent.mouseEnter(otherDay)
   act(() => otherDay.focus())
   assert.equal(preview.textContent, '2025-12-31 · 학습 기록 1개')
   assert.equal(view.queryByRole('link', { name: /기록 2024/ }), null)
-  view.changePeriod('2024')
+  await view.changePeriod('2024')
   assert.ok(view.getByText('전체 학습 기록 2개'))
-  assert.ok(view.getByRole('link', { name: /기록 2025/ }))
+  assert.ok(await view.findByRole('link', { name: /기록 2025/ }))
   assert.ok(view.getByText('2024년 · 기록 1개 · 2024-01-01 ~ 2024-12-31'))
-  fireEvent.click(view.getByRole('button', { name: '2024-02-29 · 학습 기록 1개' }))
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '2024-02-29 · 학습 기록 1개' })))
   assert.equal(view.queryByRole('link', { name: /기록 2025/ }), null)
-  fireEvent.click(view.getByRole('button', { name: '필터 해제' }))
-  assert.ok(view.getByRole('link', { name: /기록 2025/ }))
-  view.changePeriod('current')
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '필터 해제' })))
+  assert.ok(await view.findByRole('link', { name: /기록 2025/ }))
+  await view.changePeriod('current')
   assert.ok(view.getByText('선택한 기간에 학습 기록이 없어요.'))
   assert.ok(view.getByText('전체 학습 기록 2개'))
   assert.equal(view.requests(), 1)
@@ -88,7 +88,7 @@ test('period controls retain focus, reset calendar entry/scroll, and support key
     await waitFor(() => assert.ok(view.getByLabelText('기간')))
     const select = view.getByLabelText('기간')
     act(() => select.focus())
-    view.changePeriod('2024')
+    await view.changePeriod('2024')
     assert.equal(document.activeElement, select)
     const entry = view.container.querySelector('.study-heatmap__day[tabindex="0"]')
     assert.equal(entry.getAttribute('aria-label'), '2024-12-31 · 학습 기록 0개')
@@ -98,10 +98,10 @@ test('period controls retain focus, reset calendar entry/scroll, and support key
     assert.equal(document.activeElement.getAttribute('aria-label'), '2024-01-01 · 학습 기록 0개')
     fireEvent.keyDown(document.activeElement, { key: 'ArrowRight' })
     assert.equal(document.activeElement.getAttribute('aria-label'), '2024-01-08 · 학습 기록 0개')
-    fireEvent.click(document.activeElement)
+    await act(async () => fireEvent.click(document.activeElement))
     assert.equal(document.activeElement.getAttribute('aria-pressed'), 'true')
     assert.equal(view.container.querySelectorAll('.study-heatmap__blank button').length, 0)
-    view.changePeriod('recent')
+    await view.changePeriod('recent')
     assert.equal(view.container.querySelector('.study-heatmap__day[tabindex="0"]').getAttribute('aria-label'), '2026-09-21 · 학습 기록 0개')
   } finally {
     if (original) Object.defineProperty(dom.window.HTMLElement.prototype, 'scrollWidth', original)
@@ -112,7 +112,7 @@ test('period controls retain focus, reset calendar entry/scroll, and support key
 test('current year follows midnight and new year without refetching, even with no records', async () => {
   const view = mount({ records: [], today: '2026-12-31' })
   await waitFor(() => assert.ok(view.getByLabelText('기간')))
-  view.changePeriod('current')
+  await view.changePeriod('current')
   assert.equal(view.container.querySelectorAll('.study-heatmap__day').length, 365)
   view.setToday('2027-01-01')
   assert.equal(view.container.querySelectorAll('.study-heatmap__day').length, 1)
@@ -133,8 +133,8 @@ test('fetch errors are shown as errors instead of an empty heatmap', async () =>
 test('this month clears date filters, shows its count and rolls into the next month without requests', async () => {
   const view = mount({ records: ['2026-08-31', '2026-09-01'], today: '2026-09-21' })
   await waitFor(() => assert.ok(view.getByLabelText('기간')))
-  fireEvent.click(view.getByRole('button', { name: '2026-08-31 · 학습 기록 1개' }))
-  view.changePeriod('month')
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '2026-08-31 · 학습 기록 1개' })))
+  await view.changePeriod('month')
   assert.ok(view.getByText('이번 달 · 기록 1개 · 2026-09-01 ~ 2026-09-21'))
   assert.ok(view.getByText('전체 학습 기록 2개'))
   assert.equal(view.container.querySelectorAll('.study-heatmap__day').length, 21)

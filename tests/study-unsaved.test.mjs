@@ -34,7 +34,7 @@ function mount({ edit = false, save = async () => {}, logs } = {}) {
       if (id.endsWith('.css')) return {}
       if (id.endsWith('/useAuth')) return { useAuth: () => ({ user: { uid: 'owner' }, isLoading: false }) }
       if (id.endsWith('/useToday')) return { useToday: () => '2026-10-02' }
-      if (id.endsWith('/studyLogs')) return { fetchStudyLogs: logs ?? (async () => edit ? [record] : []), validateStudy: () => {}, newStudyId: () => 'new', createStudyLog: save, updateStudyLog: save }
+      if (id.endsWith('/studyLogs')) return { fetchStudyLog: async () => logs ? (await logs())[0] ?? null : record, fetchStudyOverview: () => { throw new Error('Form must not fetch overview') }, validateStudy: () => {}, newStudyId: () => 'new', createStudyLog: save, updateStudyLog: save }
       if (id.endsWith('/StudyHeatmap') || id.endsWith('/StudyWeeklyStats')) return { __esModule: true, default: () => null }
       if (id.startsWith('.')) return load(new URL(id, url).href)
       return require(id)

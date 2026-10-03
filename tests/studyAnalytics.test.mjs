@@ -120,7 +120,12 @@ function mount({ logs = [], url = '/study', fail = false } = {}) {
     '../hooks/useAuth': { useAuth: () => ({ user: { uid: 'owner' } }) },
     '../hooks/useToday': { useToday: () => today },
     '../lib/studyLogs': {
-      fetchStudyLogs: async () => { if (fail) throw new Error('조회 실패'); return logs },
+      fetchStudyOverview: async () => { if (fail) throw new Error('조회 실패'); return logs },
+      fetchStudyLog: async (_user, id) => { if (fail) throw new Error('조회 실패'); return logs.find(log => log.id === id) ?? null },
+      fetchStudyPage: async (_user, date, tag) => {
+        const matching = filterStudyLogs(logs, date, tag)
+        return { items: matching.slice(0, 20), hasMore: matching.length > 20 }
+      },
       validateStudy: api.validateStudy, newStudyId: () => 'new-record',
       createStudyLog: async (...args) => saved.push(['create', ...args]),
       updateStudyLog: async (...args) => saved.push(['update', ...args]),
@@ -140,10 +145,10 @@ test('tag and date filters compose without changing weekly totals; navigation cr
   fireEvent.change(view.getByLabelText('태그 필터'), { target: { value: 'React' } })
   assert.equal(view.queryByRole('link', { name: /CS 공부/ }), null)
   fireEvent.click(view.getByRole('button', { name: '2026-09-22 · 학습 기록 1개' }))
-  assert.ok(view.getByText(/선택한 조건에 맞는 학습 기록이 없어요/))
+  assert.ok(await view.findByText(/선택한 조건에 맞는 학습 기록이 없어요/))
   assert.ok(weekly.getByText('1시간 30분'))
   fireEvent.click(view.getByRole('button', { name: '필터 해제' }))
-  assert.ok(view.getByRole('link', { name: /CS 공부/ }))
+  assert.ok(await view.findByRole('link', { name: /CS 공부/ }))
   fireEvent.click(weekly.getByRole('button', { name: '이전 주' }))
   assert.match(weekly.getByRole('status').textContent, /2026-09-14 ~ 2026-09-20/)
   assert.ok(weekly.getByText('1개'))
@@ -152,6 +157,21 @@ test('tag and date filters compose without changing weekly totals; navigation cr
   view.setToday('2026-09-28')
   assert.match(weekly.getByRole('status').textContent, /2026-09-28 ~ 2026-10-04/)
   assert.ok(weekly.getByText('이 주에는 학습 기록이 없어요.'))
+})
+
+test('overview totals and tags include records beyond the first list page', async () => {
+  const logs = Array.from({ length: 25 }, (_, index) => record(`기록 ${index}`, '2026-09-21', 1, [index < 20 ? 'React' : 'LastPage']))
+  const view = mount({ logs })
+  const list = within(view.getByRole('region', { name: '학습 기록 목록' }))
+  await waitFor(() => assert.equal(list.getAllByRole('link').length, 20))
+  assert.ok(view.getByText('전체 학습 기록 25개'))
+  assert.ok(view.getByRole('option', { name: 'LastPage' }))
+  const weekly = within(view.getByRole('region', { name: '주간 학습 통계' }))
+  assert.ok(weekly.getByText('25개'))
+  await act(async () => fireEvent.change(view.getByLabelText('태그 필터'), { target: { value: 'LastPage' } }))
+  assert.equal(list.getAllByRole('link').length, 5)
+  assert.ok(view.getByText('LastPage · 학습 기록 5개'))
+  assert.ok(weekly.getByText('25개'))
 })
 
 test('new form defaults to today, rejects future dates, and submits selected studyDate', async () => {
