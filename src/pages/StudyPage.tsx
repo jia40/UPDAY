@@ -3,7 +3,8 @@ import CompleteModal from '../components/common/CompleteModal'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { FirebaseError } from 'firebase/app'
 import { useAuth } from '../hooks/useAuth'
-import { createStudyLog, deleteStudyLog, fetchStudyLogs, newStudyId, updateStudyLog, validateStudy, type StudyInput, type StudyLog } from '../lib/studyLogs'
+import { createStudyLog, deleteStudyLog, fetchStudyLog, fetchStudyOverview, newStudyId, updateStudyLog, validateStudy, type StudyInput, type StudyLog, type StudySummary } from '../lib/studyLogs'
+import StudyRecordList from '../components/StudyRecordList'
 import StudyRecordActions from '../components/StudyRecordActions'
 import '../styles/study.css'
 import StudyHeatmap from '../components/StudyHeatmap'
@@ -28,6 +29,7 @@ function StudyContent({ userId }: { userId: string }) {
   const [selectedTag, setSelectedTag] = useState('')
   const [period, setPeriod] = useState<StudyPeriod>('recent')
   const [logs, setLogs] = useState<StudyLog[]>([])
+  const [overview, setOverview] = useState<StudySummary[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
@@ -58,11 +60,13 @@ function StudyContent({ userId }: { userId: string }) {
   }, [])
   useEffect(() => {
     let cancelled = false
-    fetchStudyLogs(userId).then((items) => {
+    const request = selected ? fetchStudyLog(userId, selected).then(record => ({ record, summary: [] as StudySummary[] }))
+      : (formView ? Promise.resolve([]) : fetchStudyOverview(userId)).then(summary => ({ record: null, summary }))
+    request.then(({ record, summary }) => {
       if (!cancelled) {
-        setLogs(items); setLoading(false); setLoadError('')
+        setLogs(record ? [record] : []); setOverview(summary); setLoading(false); setLoadError('')
         if (new URLSearchParams(window.location.search).get('edit') === '1') {
-          const log = items.find((item) => item.id === selected)
+          const log = record
           if (log) {
             setEditing(log.id)
             setInput({ title: log.title, content: log.content, tags: log.tags.join(', '), studyMinutes: String(log.studyMinutes), studyDate: effectiveStudyDate(log) ?? '' })
@@ -76,7 +80,7 @@ function StudyContent({ userId }: { userId: string }) {
       if (!cancelled) { setLoadError(errorText(reason)); setLoading(false) }
     })
     return () => { cancelled = true }
-  }, [userId, retry, selected])
+  }, [userId, retry, selected, formView])
 
   const dirty = JSON.stringify({ ...input, hours, minutes }) !== JSON.stringify(initialForm)
   const protectChanges = formView && !loading && !completion && (dirty || pending)
@@ -130,14 +134,15 @@ function StudyContent({ userId }: { userId: string }) {
     return () => window.removeEventListener('pageshow', restore)
   }, [formView, selected])
 
-  const dates = useMemo(() => logs.map(studyLogDate), [logs])
+  const dates = useMemo(() => overview.map(studyLogDate), [overview])
   const years = useMemo(() => studyYears(dates, today), [dates, today])
   const activePeriod = typeof period === 'number' && !years.includes(period) ? 'recent' : period
   const heatmap = useMemo(() => createStudyHeatmap(dates, today, activePeriod), [dates, today, activePeriod])
   const filterDate = selectedDate && selectedDate >= heatmap.days[0].date && selectedDate <= heatmap.days[heatmap.days.length - 1].date ? selectedDate : null
-  const tags = useMemo(() => [...new Set(logs.flatMap((log) => log.tags))].sort((a, b) => a.localeCompare(b, 'ko')), [logs])
+  const tags = useMemo(() => [...new Set(overview.flatMap((log) => log.tags))].sort((a, b) => a.localeCompare(b, 'ko')), [overview])
   const filterTag = tags.includes(selectedTag) ? selectedTag : ''
-  const visibleLogs = filterStudyLogs(logs, filterDate, filterTag)
+  const visibleLogs = filterStudyLogs(overview, filterDate, filterTag)
+  const needsDateMigration = overview.some(log => !log.studyDate)
 
   async function mutate(action: () => Promise<void>, done: () => void) {
     if (lock.current) return
@@ -230,20 +235,16 @@ function StudyContent({ userId }: { userId: string }) {
         }
         {!formView && !selected && !loading && !loadError && <StudyHeatmap data={heatmap} selectedDate={filterDate} onSelect={setSelectedDate}
           period={activePeriod} years={years} onPeriodChange={(value) => { setPeriod(value); setSelectedDate(null) }} />}
-        {!formView && !selected && !loading && !loadError && <StudyWeeklyStats logs={logs} today={today} />}
+        {!formView && !selected && !loading && !loadError && <StudyWeeklyStats logs={overview} today={today} />}
         {!formView && !selected && <section className="study-panel" aria-label="학습 기록 목록">
           {!loading && !loadError && <div className="study-filter">
             <div className="study-tag-filter"><label htmlFor="study-tag-filter">태그 필터</label><select id="study-tag-filter" value={filterTag} onChange={(e) => setSelectedTag(e.target.value)}><option value="">전체 태그</option>{tags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}</select></div>
-            <p role="status">{filterDate || filterTag ? [filterDate, filterTag, '학습 기록 ' + visibleLogs.length + '개'].filter(Boolean).join(' · ') : '전체 학습 기록 ' + logs.length + '개'}</p>
+            <p role="status">{filterDate || filterTag ? [filterDate, filterTag, '학습 기록 ' + visibleLogs.length + '개'].filter(Boolean).join(' · ') : '전체 학습 기록 ' + overview.length + '개'}</p>
             {(filterDate || filterTag) && <button type="button" onClick={() => { setSelectedDate(null); setSelectedTag('') }}>필터 해제</button>}
           </div>}
-          {loading ? <p role="status">학습 기록을 불러오고 있습니다.</p> : !loadError && (visibleLogs.length === 0 ? <p className="study-empty">{filterDate || filterTag ? '선택한 조건에 맞는 학습 기록이 없어요. 필터를 해제해보세요.' : '아직 학습 기록이 없어요. 오늘 배운 내용을 남겨보세요.'}</p> :
-            <ul className="study-list">{visibleLogs.map((log) => <li key={log.id}>
-              <a className="study-record" href={`/study?record=${encodeURIComponent(log.id)}`}>
-                <strong>{log.title}</strong><span>{effectiveStudyDate(log) ?? '날짜 없음'} · {formatStudyTime(log.studyMinutes)}</span>
-                {log.tags.length > 0 && <span className="study-tags">{log.tags.map((tag) => <span key={tag}>{tag}</span>)}</span>}
-              </a>
-            </li>)}</ul>)}
+          {loading ? <p role="status">학습 기록을 불러오고 있습니다.</p> : !loadError && (needsDateMigration
+            ? <p role="alert">이전 학습 기록을 불러올 수 없습니다. 관리자에게 문의해주세요.</p>
+            : <StudyRecordList key={JSON.stringify([userId, filterDate, filterTag, retry])} userId={userId} date={filterDate} tag={filterTag} />)}
         </section>}
         {selected && !formView && detail && <section className="study-panel" aria-labelledby="study-detail-title">
           <div className="study-detail-toolbar">
@@ -258,7 +259,7 @@ function StudyContent({ userId }: { userId: string }) {
           <div className="study-feedback"><p role="alert">{error}</p><p role="status">{status}</p></div>
         </section>}
         {selected && loading && <p role="status">학습 기록을 불러오고 있습니다.</p>}
-        {selected && !loading && !loadError && !detail && <section className="study-panel"><p>학습 기록을 찾을 수 없습니다.</p><a href="/study">목록으로</a></section>}
+        {selected && !loading && !loadError && !detail && <section className="study-panel"><p>학습 기록을 찾을 수 없거나 접근 권한이 없습니다.</p><a href="/study">목록으로</a></section>}
       </div>
       <ConfirmModal open={confirmation !== null} title={confirmation === 'delete' ? '학습 기록 삭제' : '작성 취소'}
         message={confirmation === 'delete' ? '이 학습 기록을 삭제하시겠습니까?' : '작성을 취소하고 돌아가시겠습니까? 작성 중인 내용은 저장되지 않습니다.'}

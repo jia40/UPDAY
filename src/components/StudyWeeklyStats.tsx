@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import type { StudyLog } from '../lib/studyLogs'
+import type { StudySummary } from '../lib/studyLogs'
 import { formatStudyTime, shiftStudyDate, studyWeekStart, weeklyStudySummary } from '../lib/studyAnalytics'
 
 const weekdays = ['월', '화', '수', '목', '금', '토', '일']
 
-export default function StudyWeeklyStats({ logs, today }: { logs: StudyLog[]; today: string }) {
+export default function StudyWeeklyStats({ logs, today }: { logs: StudySummary[]; today: string }) {
   const [selectedWeek, setSelectedWeek] = useState<string | null>(null)
   const currentWeek = studyWeekStart(today)
   const anchor = selectedWeek && selectedWeek < currentWeek ? selectedWeek : currentWeek
