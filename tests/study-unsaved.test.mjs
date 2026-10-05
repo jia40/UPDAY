@@ -15,8 +15,9 @@ const { createElement } = await import('react')
 const require = createRequire(import.meta.url)
 afterEach(cleanup)
 
-function mount({ edit = false, save = async () => {}, logs } = {}) {
-  window.history.replaceState({}, '', edit ? '/study?record=one&edit=1' : '/study?new=1')
+function mount({ edit = false, detail = false, save = async () => {}, logs } = {}) {
+  window.history.replaceState({}, '', edit ? '/study?record=one&edit=1' : detail ? '/study?record=one' : '/study?new=1')
+  let userId = 'owner'
   const navigation = []
   const cache = new Map()
   const record = { id: 'one', title: '원래 제목', content: '원래 내용', tags: ['React'], studyMinutes: 65, studyDate: '2026-09-30', createdAt: { toDate: () => new Date('2026-09-30T12:00:00') } }
@@ -32,9 +33,9 @@ function mount({ edit = false, save = async () => {}, logs } = {}) {
     }
     new Function('exports', 'require', 'window', output)(exports, id => {
       if (id.endsWith('.css')) return {}
-      if (id.endsWith('/useAuth')) return { useAuth: () => ({ user: { uid: 'owner' }, isLoading: false }) }
+      if (id.endsWith('/useAuth')) return { useAuth: () => ({ user: { uid: userId }, isLoading: false }) }
       if (id.endsWith('/useToday')) return { useToday: () => '2026-10-02' }
-      if (id.endsWith('/studyLogs')) return { fetchStudyLog: async () => logs ? (await logs())[0] ?? null : record, fetchStudyOverview: () => { throw new Error('Form must not fetch overview') }, validateStudy: () => {}, newStudyId: () => 'new', createStudyLog: save, updateStudyLog: save }
+      if (id.endsWith('/studyLogs')) return { fetchStudyLog: async () => logs ? (await logs(userId))[0] ?? null : record, fetchStudyOverview: () => { throw new Error('Form must not fetch overview') }, validateStudy: () => {}, newStudyId: () => 'new', createStudyLog: save, updateStudyLog: save, deleteStudyLog: save }
       if (id.endsWith('/StudyHeatmap') || id.endsWith('/StudyWeeklyStats')) return { __esModule: true, default: () => null }
       if (id.startsWith('.')) return load(new URL(id, url).href)
       return require(id)
@@ -46,7 +47,7 @@ function mount({ edit = false, save = async () => {}, logs } = {}) {
   const view = render(createElement('div', null, createElement('a', { href: '/dashboard' }, '대시보드 메뉴'), createElement(page.default)))
   const change = (id, value) => fireEvent.change(view.container.querySelector(`#${id}`), { target: { value } })
   const unload = () => { const event = new window.Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented }
-  return { ...view, navigation, change, unload, ready: () => waitFor(() => assert.equal(view.container.querySelector('fieldset')?.disabled, false)) }
+  return { ...view, navigation, change, unload, setUser: (id) => { userId = id; view.rerender(createElement('div', null, createElement('a', { href: '/dashboard' }, '대시보드 메뉴'), createElement(page.default))) }, ready: () => waitFor(() => assert.equal(view.container.querySelector('fieldset')?.disabled, false)) }
 }
 
 test('all fields guard unsaved input and reverting each field removes the guard', async () => {
@@ -109,4 +110,48 @@ for (const edit of [false, true]) test(`pending save blocks internal links; fail
   assert.equal(view.unload(), false)
   fireEvent.click(view.getByRole('button', { name: '확인', exact: true }))
   assert.deepEqual(view.navigation, [edit ? '/study?record=one' : '/study?record=new'])
+})
+
+
+test('account change clears unsaved input and ignores the previous save completion', async () => {
+  let finish
+  const view = mount({ save: () => new Promise(resolve => { finish = resolve }) })
+  await view.ready()
+  view.change('study-title', '이전 계정 내용')
+  view.change('study-minutes', '10')
+  fireEvent.submit(view.container.querySelector('form'))
+  view.setUser('other')
+  await view.ready()
+  assert.equal(view.container.querySelector('#study-title').value, '')
+  assert.equal(view.unload(), false)
+  await act(async () => finish())
+  assert.equal(view.queryByRole('button', { name: '확인', exact: true }), null)
+  assert.deepEqual(view.navigation, [])
+})
+
+test('account change discards a late record response from the previous account', async () => {
+  let finish
+  const view = mount({ edit: true, logs: user => user === 'owner' ? new Promise(resolve => { finish = resolve }) : Promise.resolve([]) })
+  view.setUser('other')
+  await view.findByText('학습 기록을 찾을 수 없거나 접근 권한이 없습니다.')
+  await act(async () => finish([{ id: 'one', title: '비공개 제목', content: '내용', tags: [], studyMinutes: 1, studyDate: '2026-10-01' }]))
+  assert.equal(view.queryByDisplayValue('비공개 제목'), null)
+  assert.equal(view.container.querySelector('form'), null)
+})
+
+
+test('detail query retries and delete failure keeps confirmation available for retry', async () => {
+  let attempts = 0, deletes = 0
+  const record = { id: 'one', title: '상세 제목', content: '상세 내용', tags: ['React'], studyMinutes: 30, studyDate: '2026-10-01' }
+  const view = mount({ detail: true, logs: async () => { if (++attempts === 1) throw new Error('조회 실패'); return [record] }, save: async id => { assert.equal(id, 'one'); if (++deletes === 1) throw new Error('삭제 실패') } })
+  fireEvent.click(await view.findByRole('button', { name: '다시 불러오기' }))
+  await view.findByText('상세 내용')
+  fireEvent.click(view.getByRole('button', { name: '상세 제목 더보기' }))
+  fireEvent.click(view.getByRole('button', { name: '삭제하기' }))
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '삭제하기' })))
+  assert.ok(view.getAllByText('삭제 실패').length)
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '삭제하기' })))
+  assert.equal(deletes, 2)
+  fireEvent.click(view.getByRole('button', { name: '확인', exact: true }))
+  assert.deepEqual(view.navigation, ['/study'])
 })

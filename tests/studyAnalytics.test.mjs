@@ -130,8 +130,8 @@ function mount({ logs = [], url = '/study', fail = false } = {}) {
       createStudyLog: async (...args) => saved.push(['create', ...args]),
       updateStudyLog: async (...args) => saved.push(['update', ...args]),
     },
-    '../components/common/ConfirmModal': { __esModule: true, default: () => null },
-    '../components/common/CompleteModal': { __esModule: true, default: () => null },
+    './common/ConfirmModal': { __esModule: true, default: () => null },
+    './common/CompleteModal': { __esModule: true, default: () => null },
   })('../src/pages/StudyPage.tsx').default
   const view = render(createElement(Page))
   return { ...view, saved, setToday: (value) => { today = value; view.rerender(createElement(Page)) } }
@@ -162,7 +162,7 @@ test('tag and date filters compose without changing weekly totals; navigation cr
 test('overview totals and tags include records beyond the first list page', async () => {
   const logs = Array.from({ length: 25 }, (_, index) => record(`기록 ${index}`, '2026-09-21', 1, [index < 20 ? 'React' : 'LastPage']))
   const view = mount({ logs })
-  const list = within(view.getByRole('region', { name: '학습 기록 목록' }))
+  const list = within(await view.findByRole('region', { name: '학습 기록 목록' }))
   await waitFor(() => assert.equal(list.getAllByRole('link').length, 20))
   assert.ok(view.getByText('전체 학습 기록 25개'))
   assert.ok(view.getByRole('option', { name: 'LastPage' }))
