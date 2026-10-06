@@ -83,8 +83,20 @@ export async function fetchStudyLogs(userId: string) {
       || (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0) || a.id.localeCompare(b.id))
 }
 export function newStudyId() { return doc(collection(db, 'studyLogs')).id }
-export function createStudyLog(id: string, userId: string, input: StudyInput) {
-  return setDoc(doc(db, 'studyLogs', id), { ...validateStudy(input), userId, createdAt: serverTimestamp() })
+export async function createStudyLog(id: string, userId: string, input: StudyInput) {
+  const values = validateStudy(input)
+  try {
+    await setDoc(doc(db, 'studyLogs', id), { ...values, userId, createdAt: serverTimestamp() })
+  } catch (reason) {
+    // A lost acknowledgement may leave a saved record whose createdAt cannot be rewritten.
+    let saved: StudyLog | null = null
+    try { saved = await fetchStudyLog(userId, id) } catch { /* Preserve the original save error. */ }
+    if (saved && saved.userId === userId && saved.title === values.title && saved.content === values.content
+      && saved.studyDate === values.studyDate && saved.studyMinutes === values.studyMinutes
+      && JSON.stringify(saved.tags) === JSON.stringify(values.tags)) return
+    if (saved) throw new Error('이 학습 기록은 이미 저장되어 있습니다. 목록에서 저장된 내용을 확인해주세요.', { cause: reason })
+    throw reason
+  }
 }
 export function updateStudyLog(id: string, input: StudyInput) {
   return updateDoc(doc(db, 'studyLogs', id), validateStudy(input))

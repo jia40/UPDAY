@@ -87,12 +87,13 @@ test('tag/date intersection, clearing, and date edits affect filters, heatmap, s
   assert.equal(weeklyStudySummary(changed, '2026-09-14').minutes, 90)
 })
 
-function apiHarness() {
+function apiHarness(overrides = {}) {
   const calls = []
   const api = loader({ './firebase': { db: {} }, 'firebase/firestore': {
     collection: (_db, name) => name, doc: (...args) => args.join('/'),
     serverTimestamp: () => 'server-time', setDoc: async (...args) => calls.push(['create', ...args]),
     updateDoc: async (...args) => calls.push(['update', ...args]),
+    ...overrides,
   } })('../src/lib/studyLogs.ts')
   return { api, calls }
 }
@@ -109,6 +110,76 @@ test('create stores studyDate; update preserves createdAt/userId and validates b
   assert.equal('userId' in calls[1][2], false)
   assert.throws(() => api.updateStudyLog('a', { ...input, studyDate: '9999-12-31' }))
   assert.equal(calls.length, 2)
+})
+
+test('lost study write acknowledgement and retry reconcile without changing the saved record', async () => {
+  const input = { title: ' title ', content: ' content ', tags: 'React, React, CS', studyMinutes: '30', studyDate: '2024-02-29' }
+  let saved
+  let writes = 0
+  const queries = []
+  const originalError = new Error('acknowledgement lost')
+  const { api } = apiHarness({
+    setDoc: async (_path, data) => {
+      writes++
+      if (!saved) { saved = { ...data, createdAt: 'original-time' }; throw originalError }
+      throw new Error('createdAt update denied')
+    },
+    documentId: () => '__name__', where: (...args) => args, limit: value => value,
+    query: (...args) => { queries.push(args); return args },
+    getDocsFromServer: async () => ({ docs: [{ id: 'same-id', data: () => saved }] }),
+  })
+  await api.createStudyLog('same-id', 'owner', input)
+  const original = structuredClone(saved)
+  await api.createStudyLog('same-id', 'owner', input)
+  assert.equal(writes, 2)
+  assert.deepEqual(saved, original)
+  assert.equal(saved.createdAt, 'original-time')
+  assert.deepEqual(saved.tags, ['React', 'CS'])
+  assert.ok(queries.every(query => query.some(value => Array.isArray(value) && value[0] === '__name__' && value[2] === 'same-id')))
+  assert.ok(queries.every(query => query.some(value => Array.isArray(value) && value[0] === 'userId' && value[2] === 'owner')))
+})
+
+test('study save preserves the original error when reconciliation is empty or fails', async () => {
+  const input = { title: 'title', content: 'content', tags: '', studyMinutes: '30', studyDate: '2024-02-29' }
+  for (const result of ['missing', 'unavailable', 'permission-denied']) {
+    const originalError = new Error('save failed')
+    const { api } = apiHarness({
+      setDoc: async () => { throw originalError },
+      documentId: () => '__name__', where: (...args) => args, limit: value => value, query: (...args) => args,
+      getDocsFromServer: async () => {
+        if (result === 'missing') return { docs: [] }
+        throw Object.assign(new Error('read failed'), { code: result })
+      },
+    })
+    await assert.rejects(api.createStudyLog('same-id', 'owner', input), error => error === originalError)
+  }
+})
+
+test('study save rejects conflicting stored fields without a second write', async () => {
+  const input = { title: 'title', content: 'content', tags: 'React, CS', studyMinutes: '30', studyDate: '2024-02-29' }
+  for (const change of [{ title: 'other' }, { content: 'other' }, { tags: ['React'] }, { studyMinutes: 60 }, { studyDate: '2024-03-01' }, { userId: 'other' }]) {
+    let writes = 0
+    const originalError = new Error('save failed')
+    const saved = { userId: 'owner', title: 'title', content: 'content', tags: ['React', 'CS'], studyMinutes: 30, studyDate: '2024-02-29', createdAt: 'original-time', ...change }
+    const original = structuredClone(saved)
+    const { api } = apiHarness({
+      setDoc: async () => { writes++; throw originalError },
+      documentId: () => '__name__', where: (...args) => args, limit: value => value, query: (...args) => args,
+      getDocsFromServer: async () => ({ docs: [{ id: 'same-id', data: () => saved }] }),
+    })
+    await assert.rejects(api.createStudyLog('same-id', 'owner', input), error => error.cause === originalError && /이미 저장/.test(error.message))
+    assert.equal(writes, 1)
+    assert.deepEqual(saved, original)
+  }
+})
+
+test('invalid study input is rejected before saving or reconciling', async () => {
+  let calls = 0
+  const { api } = apiHarness({
+    setDoc: async () => { calls++ }, getDocsFromServer: async () => { calls++ },
+  })
+  await assert.rejects(api.createStudyLog('same-id', 'owner', { title: '', content: 'content', tags: '', studyMinutes: '30', studyDate: '2024-02-29' }))
+  assert.equal(calls, 0)
 })
 
 function mount({ logs = [], url = '/study', fail = false } = {}) {
