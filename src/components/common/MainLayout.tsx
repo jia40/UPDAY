@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import Header from './Header'
+import { LogoutGuardProvider } from '../auth/LogoutGuard'
 
 function MainLayout({ pathname, children }: { pathname: string; children: ReactNode }) {
   const { user, isLoading, error } = useAuth()
@@ -23,11 +24,11 @@ function MainLayout({ pathname, children }: { pathname: string; children: ReactN
   }
 
   return (
-    <div className="main-layout">
+    <LogoutGuardProvider><div className="main-layout">
       <a className="skip-link" href="#main-content">본문으로 건너뛰기</a>
       <Header pathname={pathname} />
       <main id="main-content" tabIndex={-1}>{children}</main>
-    </div>
+    </div></LogoutGuardProvider>
   )
 }
 

@@ -15,7 +15,7 @@ const { createElement } = await import('react')
 const require = createRequire(import.meta.url)
 afterEach(cleanup)
 
-function mount({ edit = false, detail = false, save = async () => {}, logs } = {}) {
+function mount({ edit = false, detail = false, save = async () => {}, logs, logout } = {}) {
   window.history.replaceState({}, '', edit ? '/study?record=one&edit=1' : detail ? '/study?record=one' : '/study?new=1')
   let userId = 'owner'
   const navigation = []
@@ -28,11 +28,13 @@ function mount({ edit = false, detail = false, save = async () => {}, logs } = {
     const output = ts.transpileModule(readFileSync(url, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
     const exports = {}
     const scopedWindow = {
-      location: { get search() { return window.location.search }, get href() { return window.location.href }, get origin() { return window.location.origin }, get pathname() { return window.location.pathname }, assign: url => navigation.push(url) },
+      location: { get search() { return window.location.search }, get href() { return window.location.href }, get origin() { return window.location.origin }, get pathname() { return window.location.pathname }, assign: url => navigation.push(url), replace: url => navigation.push(url) },
       addEventListener: window.addEventListener.bind(window), removeEventListener: window.removeEventListener.bind(window),
     }
     new Function('exports', 'require', 'window', output)(exports, id => {
       if (id.endsWith('.css')) return {}
+      if (id === 'firebase/auth') return { signOut: logout ?? (async () => {}) }
+      if (id.endsWith('/firebase')) return { auth: {} }
       if (id.endsWith('/useAuth')) return { useAuth: () => ({ user: { uid: userId }, isLoading: false }) }
       if (id.endsWith('/useToday')) return { useToday: () => '2026-10-02' }
       if (id.endsWith('/studyLogs')) return { fetchStudyLog: async () => logs ? (await logs(userId))[0] ?? null : record, fetchStudyOverview: () => { throw new Error('Form must not fetch overview') }, validateStudy: () => {}, newStudyId: () => 'new', createStudyLog: save, updateStudyLog: save, deleteStudyLog: save }
@@ -44,11 +46,81 @@ function mount({ edit = false, detail = false, save = async () => {}, logs } = {
     return exports
   }
   const page = load('../src/pages/StudyPage.tsx')
-  const view = render(createElement('div', null, createElement('a', { href: '/dashboard' }, '대시보드 메뉴'), createElement(page.default)))
+  const Provider = load('../src/components/auth/LogoutGuard.tsx').LogoutGuardProvider
+  const Header = load('../src/components/common/Header.tsx').default
+  const screen = () => createElement(Provider, null, logout ? createElement(Header, { pathname: '/study' }) : createElement('a', { href: '/dashboard' }, '대시보드 메뉴'), createElement(page.default))
+  const view = render(screen())
   const change = (id, value) => fireEvent.change(view.container.querySelector(`#${id}`), { target: { value } })
   const unload = () => { const event = new window.Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented }
-  return { ...view, navigation, change, unload, setUser: (id) => { userId = id; view.rerender(createElement('div', null, createElement('a', { href: '/dashboard' }, '대시보드 메뉴'), createElement(page.default))) }, ready: () => waitFor(() => assert.equal(view.container.querySelector('fieldset')?.disabled, false)) }
+  return { ...view, navigation, change, unload, setUser: (id) => { userId = id; view.rerender(screen()) }, ready: () => waitFor(() => assert.equal(view.container.querySelector('fieldset')?.disabled, false)) }
 }
+
+for (const edit of [false, true]) test(`dirty ${edit ? 'edit' : 'new'} form confirms logout and cancellation preserves input`, async () => {
+  let calls = 0
+  const view = mount({ edit, logout: async () => { calls++ } })
+  await view.ready(); view.change('study-title', '작성 중')
+  fireEvent.click(view.getByRole('button', { name: '로그아웃' }))
+  await view.findByRole('button', { name: '계속 작성' })
+  assert.equal(calls, 0)
+  fireEvent.click(view.getByRole('button', { name: '계속 작성' }))
+  await view.ready()
+  assert.equal(view.getByLabelText('제목 *').value, '작성 중')
+  assert.equal(view.unload(), true)
+  assert.deepEqual(view.navigation, [])
+  fireEvent.click(view.getByRole('button', { name: '로그아웃' }))
+  await view.findByRole('button', { name: '계속 작성' })
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '로그아웃', exact: true })))
+  assert.equal(calls, 1)
+  assert.deepEqual(view.navigation, ['/login'])
+})
+
+test('logout failure retains the dirty form and allows a confirmed retry', async () => {
+  let calls = 0
+  const view = mount({ logout: async () => { if (++calls === 1) throw new Error('offline') } })
+  await view.ready(); view.change('study-title', '작성 중')
+  fireEvent.click(view.getByRole('button', { name: '로그아웃' }))
+  await view.findByRole('button', { name: '계속 작성' })
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '로그아웃', exact: true })))
+  await view.findByText('로그아웃에 실패했습니다. 잠시 후 다시 시도해주세요.')
+  await view.ready()
+  assert.equal(view.getByLabelText('제목 *').value, '작성 중')
+  assert.equal(view.unload(), true)
+  assert.deepEqual(view.navigation, [])
+  fireEvent.click(view.getByRole('button', { name: '로그아웃' }))
+  await view.findByRole('button', { name: '계속 작성' })
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '로그아웃', exact: true })))
+  assert.equal(calls, 2)
+})
+
+test('pending save blocks logout and a failed save restores confirmation', async () => {
+  let reject, calls = 0
+  const view = mount({ save: () => new Promise((_resolve, fail) => { reject = fail }), logout: async () => { calls++ } })
+  await view.ready(); view.change('study-title', '작성 중'); view.change('study-minutes', '10')
+  fireEvent.submit(view.container.querySelector('form'))
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '로그아웃' })))
+  assert.equal(calls, 0)
+  assert.equal(view.queryByRole('button', { name: '계속 작성' }), null)
+  await act(async () => reject(new Error('저장 실패')))
+  fireEvent.click(view.getByRole('button', { name: '로그아웃' }))
+  await view.findByRole('button', { name: '계속 작성' })
+  assert.equal(calls, 0)
+})
+
+test('clean forms and form unmounts do not leave a logout guard', async () => {
+  let calls = 0
+  const view = mount({ logout: async () => { calls++ } })
+  await view.ready()
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '로그아웃' })))
+  assert.equal(calls, 1)
+  view.change('study-title', '이전 계정')
+  fireEvent.click(view.getByRole('button', { name: '로그아웃' }))
+  await view.findByRole('button', { name: '계속 작성' })
+  view.setUser('other')
+  await view.ready()
+  assert.equal(view.queryByRole('button', { name: '계속 작성' }), null)
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '로그아웃' })))
+  assert.equal(calls, 2)
+})
 
 test('all fields guard unsaved input and reverting each field removes the guard', async () => {
   const view = mount(); await view.ready()
