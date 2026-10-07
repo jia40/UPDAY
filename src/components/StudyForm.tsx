@@ -6,6 +6,7 @@ import { useStudyMutation } from '../hooks/useStudyMutation'
 import { errorText } from '../lib/studyErrors'
 import { effectiveStudyDate } from '../lib/studyAnalytics'
 import { createStudyLog, newStudyId, updateStudyLog, validateStudy, type StudyInput, type StudyLog } from '../lib/studyLogs'
+import { useLogoutGuard } from '../hooks/useLogoutGuard'
 
 const empty: StudyInput = { title: '', content: '', tags: '', studyMinutes: '', studyDate: '' }
 export default function StudyForm({ userId, record }: { userId: string; record?: StudyLog }) {
@@ -19,15 +20,36 @@ export default function StudyForm({ userId, record }: { userId: string; record?:
   const [input, setInput] = useState<StudyInput>(() => ({ title: initialForm.title, content: initialForm.content, tags: initialForm.tags, studyMinutes: initialForm.studyMinutes, studyDate: initialForm.studyDate }))
   const [hours, setHours] = useState(initialForm.hours)
   const [minutes, setMinutes] = useState(initialForm.minutes)
-  const [confirmation, setConfirmation] = useState<'cancel' | null>(null)
+  const [confirmation, setConfirmation] = useState<'cancel' | 'logout' | null>(null)
   const [completion, setCompletion] = useState<{ message: string; url: string } | null>(null)
   const [leaveUrl, setLeaveUrl] = useState<string | null>(null)
   const allowLeave = useRef(false)
   const createId = useRef<string | null>(null)
   const { error, setError, status, setStatus, pending, lock, mutate } = useStudyMutation()
-  const blocked = pending
+  const logoutGuard = useLogoutGuard()
+  const registerLogoutGuard = logoutGuard?.register
+  const logoutDecision = useRef<((confirmed: boolean) => void) | null>(null)
+  const blocked = pending || Boolean(logoutGuard?.loggingOut)
   const dirty = JSON.stringify({ ...input, hours, minutes }) !== JSON.stringify(initialForm)
   const protectChanges = !completion && (dirty || pending)
+  useEffect(() => {
+    if (!logoutGuard?.loggingOut) allowLeave.current = false
+  }, [logoutGuard?.loggingOut])
+  useEffect(() => {
+    if (!registerLogoutGuard) return
+    const unregister = registerLogoutGuard(async () => {
+      if (lock.current) return false
+      if (!protectChanges) return true
+      setError('')
+      setConfirmation('logout')
+      return new Promise<boolean>(resolve => { logoutDecision.current = resolve })
+    })
+    return () => {
+      unregister()
+      logoutDecision.current?.(false)
+      logoutDecision.current = null
+    }
+  }, [registerLogoutGuard, protectChanges, lock, setError])
   useEffect(() => {
     if (!protectChanges) return
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -44,7 +66,7 @@ export default function StudyForm({ userId, record }: { userId: string; record?:
       if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) return
       event.preventDefault()
       event.stopPropagation()
-      if (lock.current) return
+      if (lock.current || logoutGuard?.loggingOut) return
       setLeaveUrl(url.href)
       setError('')
       setConfirmation('cancel')
@@ -58,7 +80,7 @@ export default function StudyForm({ userId, record }: { userId: string; record?:
       window.removeEventListener('pageshow', restore)
       document.removeEventListener('click', followLink, true)
     }
-  }, [protectChanges, lock, setError])
+  }, [protectChanges, lock, setError, logoutGuard?.loggingOut])
 
   function cancelForm() {
     if (lock.current) return
@@ -70,7 +92,7 @@ export default function StudyForm({ userId, record }: { userId: string; record?:
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (lock.current) return
+    if (lock.current || logoutGuard?.loggingOut) return
     setStatus('')
     const hourValue = Number(hours)
     const minuteValue = Number(minutes)
@@ -123,10 +145,15 @@ export default function StudyForm({ userId, record }: { userId: string; record?:
       </form>
       <div className="study-feedback"><p role="alert">{error}</p><p role="status">{status}</p></div>
     </section>
-    <ConfirmModal open={confirmation !== null} title="작성 취소" message="작성을 취소하고 돌아가시겠습니까? 작성 중인 내용은 저장되지 않습니다."
-      confirmLabel="나가기" cancelLabel="계속 작성" isPending={pending} error={error}
-      onClose={() => { if (!lock.current) { setConfirmation(null); setError('') } }}
-      onConfirm={() => { if (!lock.current) { allowLeave.current = true; window.location.assign(leaveUrl ?? detailUrl) } }} />
+    <ConfirmModal open={confirmation !== null} title={confirmation === 'logout' ? '로그아웃' : '작성 취소'}
+      message={confirmation === 'logout' ? '로그아웃하시겠습니까? 작성 중인 내용은 저장되지 않습니다.' : '작성을 취소하고 돌아가시겠습니까? 작성 중인 내용은 저장되지 않습니다.'}
+      confirmLabel={confirmation === 'logout' ? '로그아웃' : '나가기'} cancelLabel="계속 작성" isPending={pending} error={error}
+      onClose={() => { if (!lock.current) { setConfirmation(null); setError(''); logoutDecision.current?.(false); logoutDecision.current = null } }}
+      onConfirm={() => {
+        if (lock.current) return
+        if (confirmation === 'logout') { allowLeave.current = true; setConfirmation(null); logoutDecision.current?.(true); logoutDecision.current = null; return }
+        allowLeave.current = true; window.location.assign(leaveUrl ?? detailUrl)
+      }} />
     <CompleteModal open={completion !== null} message={completion?.message} onClose={() => { if (completion) window.location.assign(completion.url) }} />
   </>
 }

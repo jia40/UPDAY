@@ -3,24 +3,30 @@ import { signOut } from 'firebase/auth'
 import { auth } from '../../lib/firebase'
 import { mainPages, isPageActive } from '../../lib/navigation'
 import '../../styles/header.css'
+import { useLogoutGuard } from '../../hooks/useLogoutGuard'
 
 function Header({ pathname }: { pathname: string }) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [error, setError] = useState('')
   const logoutPending = useRef(false)
+  const guard = useLogoutGuard()
 
   const handleLogout = async () => {
     if (logoutPending.current) return
     logoutPending.current = true
     setIsLoggingOut(true)
     setError('')
+    guard?.setLoggingOut(true)
     try {
+      if (guard && !await guard.confirmLogout()) return
       await signOut(auth)
       window.location.replace('/login')
     } catch {
       setError('로그아웃에 실패했습니다. 잠시 후 다시 시도해주세요.')
+    } finally {
       logoutPending.current = false
       setIsLoggingOut(false)
+      guard?.setLoggingOut(false)
     }
   }
 
