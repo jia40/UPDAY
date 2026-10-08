@@ -270,7 +270,7 @@ test('legacy edit defaults to createdAt date and submits a changed studyDate', a
 
 test('dashboard streak uses explicit study dates instead of creation time', async () => {
   const logs = [record('a', '2026-09-21'), record('b', '2026-09-22')]
-  const Card = loader({ '../lib/studyLogs': { fetchStudyLogs: async () => logs } })('../src/components/DashboardStudyCard.tsx').default
+  const Card = loader({ '../lib/studyLogs': { fetchStudyOverview: async () => logs } })('../src/components/DashboardStudyCard.tsx').default
   const view = render(createElement(Card, { userId: 'owner', date: '2026-09-22' }))
   await waitFor(() => assert.ok(view.getByText('2일')))
   assert.ok(view.getByText('오늘의 학습을 기록했어요'))
@@ -282,3 +282,69 @@ test('failed record fetch does not display misleading zero weekly totals', async
   assert.equal(view.queryByRole('region', { name: '주간 학습 통계' }), null)
   assert.equal(view.queryByLabelText('태그 필터'), null)
 })
+
+function mountDashboard() {
+  const requests = []
+  const Card = loader({ '../lib/studyLogs': {
+    fetchStudyOverview: userId => new Promise((resolve, reject) => requests.push({ userId, resolve, reject })),
+    fetchStudyLogs: () => { throw new Error('Dashboard must not fetch full records') },
+  } })('../src/components/DashboardStudyCard.tsx').default
+  const view = render(createElement(Card, { userId: 'owner', date: '2026-09-23' }))
+  const refresh = () => act(() => {
+    for (const event of ['focus', 'online', 'pageshow']) window.dispatchEvent(new window.Event(event))
+    document.dispatchEvent(new window.Event('visibilitychange'))
+  })
+  return { ...view, requests, refresh, change: (userId, date) => view.rerender(createElement(Card, { userId, date })) }
+}
+
+test('dashboard uses metadata and coalesces refresh events while a request is pending', async () => {
+  const view = mountDashboard()
+  view.refresh(); view.refresh()
+  assert.equal(view.requests.length, 1)
+  const metadata = ['2026-09-22', '2026-09-23'].map((studyDate, index) => ({ id: String(index), studyDate, studyMinutes: 30, tags: [] }))
+  await act(async () => view.requests[0].resolve(metadata))
+  assert.ok(view.getByText('2일'))
+  assert.ok(view.getByText('오늘의 학습을 기록했어요'))
+  view.refresh(); view.refresh()
+  assert.equal(view.requests.length, 2)
+  await act(async () => view.requests[1].resolve([]))
+  assert.ok(view.getByText('0일'))
+  assert.ok(view.getByText('아직 학습 기록이 없어요. 첫 배움을 남겨보세요.'))
+  view.unmount(); view.refresh()
+  assert.equal(view.requests.length, 2)
+})
+
+test('dashboard refresh recovers after failure and retry accepts future refreshes', async () => {
+  const view = mountDashboard()
+  await act(async () => view.requests[0].reject(new Error('offline')))
+  assert.ok(view.getByRole('alert'))
+  fireEvent.click(view.getByRole('button', { name: '다시 불러오기' }))
+  assert.equal(view.requests.length, 2)
+  view.refresh()
+  assert.equal(view.requests.length, 2)
+  await act(async () => view.requests[1].resolve([]))
+  assert.equal(view.queryByRole('alert'), null)
+  view.refresh()
+  await act(async () => view.requests[2].reject(new Error('offline again')))
+  assert.ok(view.getByRole('alert'))
+  view.refresh()
+  await act(async () => view.requests[3].resolve([]))
+  assert.equal(view.queryByRole('alert'), null)
+})
+
+for (const changed of [{ userId: 'other', date: '2026-09-23' }, { userId: 'owner', date: '2026-09-24' }]) {
+  test(`dashboard discards old results when account/date changes to ${changed.userId}/${changed.date}`, async () => {
+    const view = mountDashboard()
+    await act(async () => view.requests[0].resolve([{ studyDate: '2026-09-23' }]))
+    assert.ok(view.getByText('1일'))
+    view.refresh()
+    view.change(changed.userId, changed.date)
+    assert.equal(view.queryByText('1일'), null)
+    assert.ok(view.getByRole('status'))
+    assert.equal(view.requests[2].userId, changed.userId)
+    await act(async () => view.requests[1].resolve([{ studyDate: '2026-09-23' }]))
+    assert.equal(view.queryByText('1일'), null)
+    await act(async () => view.requests[2].resolve([]))
+    assert.ok(view.getByText('0일'))
+  })
+}
