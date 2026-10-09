@@ -54,13 +54,18 @@ service cloud.firestore {
           && data.tags is list && data.tags.size() <= 10 && data.tags.toSet().size() == data.tags.size()
           && tagValid(data.tags, 0) && tagValid(data.tags, 1) && tagValid(data.tags, 2) && tagValid(data.tags, 3) && tagValid(data.tags, 4)
           && tagValid(data.tags, 5) && tagValid(data.tags, 6) && tagValid(data.tags, 7) && tagValid(data.tags, 8) && tagValid(data.tags, 9)
-          && data.status == 'unknown' && data.lastReviewedAt == null
-          && data.createdAt is timestamp && data.createdAt == request.time;
+          && data.status in ['unknown', 'learning', 'explainable']
+          && (data.lastReviewedAt == null || data.lastReviewedAt is timestamp)
+          && data.createdAt is timestamp;
       }
       allow read: if owner();
-      allow create: if request.auth != null && valid(request.resource.data);
-      // Editing, deleting and review-state changes belong to subsequent issues.
-      allow update, delete: if false;
+      allow create: if request.auth != null && valid(request.resource.data)
+        && request.resource.data.status == 'unknown' && request.resource.data.lastReviewedAt == null
+        && request.resource.data.createdAt == request.time;
+      allow delete: if owner();
+      allow update: if owner() && valid(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['question', 'answer', 'tags', 'status', 'lastReviewedAt'])
+        && (request.resource.data.lastReviewedAt == resource.data.lastReviewedAt || request.resource.data.lastReviewedAt == request.time);
     }
     match /studyLogs/{logId} {
       function calendarDate(value) {

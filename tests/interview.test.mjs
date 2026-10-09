@@ -48,6 +48,8 @@ function library({ records = [], writeError, readError } = {}) {
     documentId: () => '__name__', where: (...args) => args, limit: value => ['limit', value], query: (...args) => args,
     serverTimestamp: () => 'server-time',
     setDoc: async (...args) => { calls.writes.push(args); if (writeError) throw writeError },
+    updateDoc: async (...args) => { calls.writes.push(args); if (writeError) throw writeError },
+    deleteDoc: async (...args) => { calls.writes.push(args); if (writeError) throw writeError },
     getDocsFromServer: async q => { calls.reads.push(q); if (readError) throw readError; return { docs: records.map(item => ({ id: item.id, data: () => item })) } },
   } })('../src/lib/interviewQuestions.ts')
   return { api, calls }
@@ -98,6 +100,11 @@ function mount({ url = '/interview', records = [], detail = null, user = { uid: 
     '../hooks/useAuth': { useAuth: () => auth },
     '../lib/interviewQuestions': {
       validateInterview: validation.validateInterview, newInterviewId: () => 'new-id',
+      interviewStatuses: validation.interviewStatuses,
+      updateInterviewQuestion: async (...args) => { calls.save.push(args); if (save) await save(...args) },
+      deleteInterviewQuestion: async (...args) => { calls.save.push(['delete', ...args]); if (save) await save(...args) },
+      updateInterviewStatus: async (...args) => { calls.save.push(['status', ...args]); if (save) await save(...args) },
+      reviewInterviewQuestion: async (...args) => { calls.save.push(['review', ...args]); if (save) await save(...args) },
       fetchInterviewQuestions: async uid => { calls.list.push(uid); if (failure) throw failure; return records },
       fetchInterviewQuestion: async (...args) => { calls.detail.push(args); if (failure) throw failure; return detail },
       createInterviewQuestion: async (...args) => { calls.save.push(args); if (save) await save(...args) },
@@ -176,4 +183,59 @@ test('changing accounts resets form fields before saving under the new owner', a
   fireEvent.change(view.getByLabelText('질문 *'), { target: { value: 'private draft' } })
   view.setUser({ uid: 'other' })
   assert.equal(view.getByLabelText('질문 *').value, '')
+})
+
+test('edit, status and review only update mutable fields and validate before writing', async () => {
+  const { api, calls } = library()
+  api.updateInterviewQuestion('a', { question: ' q ', answer: ' answer ', tags: 'React,React' })
+  api.updateInterviewStatus('a', 'learning')
+  api.reviewInterviewQuestion('a')
+  api.deleteInterviewQuestion('a')
+  assert.deepEqual(calls.writes, [
+    ['interviewQuestions/a', { question: 'q', answer: 'answer', tags: ['React'] }],
+    ['interviewQuestions/a', { status: 'learning' }],
+    ['interviewQuestions/a', { lastReviewedAt: 'server-time' }], ['interviewQuestions/a'],
+  ])
+  assert.throws(() => api.updateInterviewStatus('a', 'invalid'))
+  assert.throws(() => api.updateInterviewQuestion('a', { question: '', answer: '', tags: '' }))
+  assert.equal(calls.writes.length, 4)
+})
+
+test('edit loads existing fields, retains input after failure and retries the same question', async () => {
+  let fail = true
+  const view = mount({ url: '/interview?question=a&edit=1', detail: record('a'), save: async () => { if (fail) throw new Error('수정 실패') } })
+  await view.findByText('면접 질문 수정')
+  assert.equal(view.getByLabelText('질문 *').value, '질문 a')
+  fireEvent.change(view.getByLabelText('답변 (선택)'), { target: { value: '추가 답변' } })
+  await act(async () => view.submit())
+  assert.match(view.getByRole('alert').textContent, /수정 실패/)
+  assert.equal(view.getByLabelText('답변 (선택)').value, '추가 답변')
+  fail = false
+  await act(async () => view.submit())
+  assert.equal(view.calls.save[1][0], 'a')
+  fireEvent.click(view.getByRole('button', { name: '질문 보러가기' }))
+  assert.deepEqual(view.calls.navigate, ['/interview?question=a'])
+})
+
+test('status failure keeps the saved selection; review refreshes server timestamp; deletion retries', async () => {
+  let fail = true
+  const detail = record('a')
+  const view = mount({ url: '/interview?question=a', detail, save: async () => { if (fail) throw new Error('처리 실패'); detail.lastReviewedAt = { toDate: () => new Date('2026-10-08T12:00:00') } } })
+  const select = await view.findByLabelText('이해 상태')
+  await act(async () => fireEvent.change(select, { target: { value: 'learning' } }))
+  assert.equal(select.value, 'unknown')
+  fail = false
+  await act(async () => fireEvent.change(select, { target: { value: 'explainable' } }))
+  assert.equal(select.value, 'explainable')
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '복습 완료' })))
+  assert.ok(view.getByText('복습이 기록되었습니다.'))
+  assert.ok(view.getByText(/마지막 복습 · .*2026/))
+  fireEvent.click(view.getByRole('button', { name: '삭제하기' }))
+  fail = true
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '삭제', exact: true })))
+  assert.ok(view.getByRole('dialog'))
+  fail = false
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '삭제', exact: true })))
+  fireEvent.click(view.getByRole('button', { name: '확인', exact: true }))
+  assert.deepEqual(view.calls.navigate, ['/interview'])
 })

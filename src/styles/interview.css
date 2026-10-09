@@ -6,12 +6,12 @@
 .interview-panel h2 { margin: 0 0 20px; font-size: 22px; }
 .interview-panel fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .interview-panel label { display: block; margin: 16px 0 8px; font-size: 14px; font-weight: 600; }
-.interview-panel input, .interview-panel textarea { display: block; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #b8c9bd; border-radius: 8px; font: inherit; }
+.interview-panel input, .interview-panel textarea, .interview-panel select { display: block; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #b8c9bd; border-radius: 8px; font: inherit; }
 .interview-panel textarea { resize: vertical; line-height: 1.7; }
 .interview-panel button, .interview-new { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 14px; border: 1px solid #c9d8cd; border-radius: 8px; background: #f0f6f2; color: #285d37; font: inherit; cursor: pointer; text-decoration: none; }
 .interview-panel .interview-primary { background: #286d3e; color: white; }
 .interview-page a { color: #285d37; }
-.interview-page :is(a, button, input, textarea):focus-visible { outline: 2px solid #647268; outline-offset: 3px; }
+.interview-page :is(a, button, input, textarea, select):focus-visible { outline: 2px solid #647268; outline-offset: 3px; }
 .interview-panel :disabled { opacity: .65; cursor: not-allowed; }
 .interview-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
 .interview-help { color: #607066; font-size: 13px; line-height: 1.7; }

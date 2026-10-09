@@ -29,7 +29,7 @@ function DashboardPage() {
 
       <div className="dashboard__notice">
         <span aria-hidden="true">✦</span>
-        <p>오늘 할 일과 연속 학습일을 확인해보세요. 면접 준비와 취업 지원 기능도 준비하고 있습니다.</p>
+        <p>오늘 할 일과 연속 학습일을 확인하고, 면접 질문을 복습해보세요.</p>
       </div>
 
       <div className="dashboard__grid">
@@ -50,7 +50,7 @@ function DashboardPage() {
             ) : (
               <div className="summary-card__metric"><span>{card.metric}</span><strong aria-label="집계 준비 중">—</strong></div>
             )}
-            <p className="summary-card__status">기록 기능 준비 중</p>
+            <p className="summary-card__status">{card.id === 'interview' ? '질문 기록 및 복습' : '기록 기능 준비 중'}</p>
             <p className="summary-card__description">{card.description}</p>
             <a className="summary-card__link" href={card.path}>{card.action} <span aria-hidden="true">→</span></a>
           </section>
