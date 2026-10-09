@@ -1,10 +1,12 @@
-import { collection, doc, documentId, getDocsFromServer, limit, query, serverTimestamp, setDoc, where, type Timestamp } from 'firebase/firestore'
+import { collection, deleteDoc, doc, documentId, getDocsFromServer, limit, query, serverTimestamp, setDoc, updateDoc, where, type Timestamp } from 'firebase/firestore'
 import { db } from './firebase'
 
 export type InterviewInput = { question: string; answer: string; tags: string }
+export type InterviewStatus = 'unknown' | 'learning' | 'explainable'
+export const interviewStatuses: Record<InterviewStatus, string> = { unknown: '모름', learning: '이해 중', explainable: '설명 가능' }
 export type InterviewQuestion = {
   id: string; userId: string; question: string; answer: string; tags: string[]
-  status: 'unknown'; lastReviewedAt: null; createdAt: Timestamp
+  status: InterviewStatus; lastReviewedAt: Timestamp | null; createdAt: Timestamp
 }
 export function validateInterview(input: InterviewInput) {
   const question = input.question.trim()
@@ -16,6 +18,17 @@ export function validateInterview(input: InterviewInput) {
   return { question, answer, tags }
 }
 export function newInterviewId() { return doc(collection(db, 'interviewQuestions')).id }
+export function updateInterviewQuestion(id: string, input: InterviewInput) {
+  return updateDoc(doc(db, 'interviewQuestions', id), validateInterview(input))
+}
+export function deleteInterviewQuestion(id: string) { return deleteDoc(doc(db, 'interviewQuestions', id)) }
+export function updateInterviewStatus(id: string, status: InterviewStatus) {
+  if (!Object.hasOwn(interviewStatuses, status)) throw new Error('올바른 이해 상태를 선택해주세요.')
+  return updateDoc(doc(db, 'interviewQuestions', id), { status })
+}
+export function reviewInterviewQuestion(id: string) {
+  return updateDoc(doc(db, 'interviewQuestions', id), { lastReviewedAt: serverTimestamp() })
+}
 export async function createInterviewQuestion(id: string, userId: string, input: InterviewInput) {
   const values = validateInterview(input)
   try {

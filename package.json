@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "node --test tests/*.test.mjs",
-    "test:rules": "npx --yes firebase-tools emulators:exec --only firestore --project demo-upday \"node --test --test-concurrency=1 tests/study-rules.test.mjs tests/todo-rules.test.mjs\""
+    "test:rules": "npx --yes firebase-tools emulators:exec --only firestore --project demo-upday \"node --test --test-concurrency=1 tests/study-rules.test.mjs tests/todo-rules.test.mjs tests/interview-rules.test.mjs\""
   },
   "dependencies": {
     "firebase": "^12.18.0",
