@@ -36,6 +36,7 @@ function mount(pathname) {
     } },
   })
   const mocks = {
+    './components/common/PageLoader': { __esModule: true, default: ({ children }) => children },
     './components/auth/GuestOnly': guard,
     './lib/navigation': { mainPages: [] },
     './components/common/MainLayout': { __esModule: true, default: () => null },
@@ -62,20 +63,20 @@ for (const path of ['/', '/login', '/signup', '/login/', '/signup/']) {
   })
 }
 
-test('guest can open login and signup pages', () => {
+test('guest can open login and signup pages', async () => {
   for (const path of ['/', '/login', '/signup']) {
     const view = mount(path)
     view.emit(null)
-    assert.ok(view.getByText(path === '/signup' ? 'SignupPage' : 'LoginPage'))
+    assert.ok(await view.findByText(path === '/signup' ? 'SignupPage' : 'LoginPage'))
     assert.deepEqual(view.navigations, [])
     cleanup()
   }
 })
 
-test('signup auth changes preserve the admitted form for profile and sign-out retries', () => {
+test('signup auth changes preserve the admitted form for profile and sign-out retries', async () => {
   const view = mount('/signup')
   view.emit(null)
-  const form = view.getByText('SignupPage')
+  const form = await view.findByText('SignupPage')
   view.emit({ uid: 'new-account' })
   assert.equal(view.getByText('SignupPage'), form)
   view.emit(null)

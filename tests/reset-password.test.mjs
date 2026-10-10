@@ -82,7 +82,7 @@ for (const [error, text] of [
     assert.equal(view.calls.length, 2)
   })
 }
-test('public reset route bypasses protected layout and is linked from login', () => {
+test('public reset route bypasses protected layout and is linked from login', async () => {
   function load(path, mocks, window) {
     const source = readFileSync(new URL(path, import.meta.url), 'utf8')
     const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
@@ -94,8 +94,8 @@ test('public reset route bypasses protected layout and is linked from login', ()
     }, window)
     return exports.default
   }
-  const App = load('../src/App.tsx', { './pages/ResetPasswordPage': { __esModule: true, default: () => createElement('h1', null, 'reset route') } }, { location: { pathname: '/reset-password/' } })
-  assert.ok(render(createElement(App)).getByRole('heading', { name: 'reset route' }))
+  const App = load('../src/App.tsx', { './lib/navigation': { mainPages: [] }, './components/common/PageLoader': { __esModule: true, default: ({ children }) => children }, './pages/ResetPasswordPage': { __esModule: true, default: () => createElement('h1', null, 'reset route') } }, { location: { pathname: '/reset-password/' } })
+  assert.ok(await render(createElement(App)).findByRole('heading', { name: 'reset route' }))
   cleanup()
   const Login = load('../src/pages/LoginPage.tsx', { 'firebase/app': { FirebaseError }, 'firebase/auth': {}, '../lib/firebase': { auth: {} } }, {})
   const view = render(createElement(Login))
