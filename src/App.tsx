@@ -11,6 +11,7 @@ const SignupPage = lazy(() => import('./pages/SignupPage'))
 const TodayPage = lazy(() => import('./pages/TodayPage'))
 const StudyPage = lazy(() => import('./pages/StudyPage'))
 const InterviewPage = lazy(() => import('./pages/InterviewPage'))
+const JobPage = lazy(() => import('./pages/JobPage'))
 
 function App() {
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
@@ -27,7 +28,7 @@ function App() {
     return (
       <MainLayout pathname={pathname}>
         <PageLoader key={pathname}>
-        {pathname === '/dashboard' ? <DashboardPage /> : pathname === '/today' ? <TodayPage /> : pathname === '/study' ? <StudyPage /> : pathname === '/interview' ? <InterviewPage /> : (
+        {pathname === '/dashboard' ? <DashboardPage /> : pathname === '/today' ? <TodayPage /> : pathname === '/study' ? <StudyPage /> : pathname === '/interview' ? <InterviewPage /> : pathname === '/job' ? <JobPage /> : (
           <ComingSoonPage
             title={page?.label ?? '마이페이지'}
             description={page?.description ?? '내 계정 정보를 확인하는 공간입니다.'}

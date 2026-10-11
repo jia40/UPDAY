@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { errorText } from '../lib/studyErrors'
 
-export function useStudyMutation() {
+export function useStudyMutation(formatError: (reason: unknown) => string = errorText) {
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
   const [pending, setPending] = useState(false)
@@ -21,7 +21,7 @@ export function useStudyMutation() {
       setStatus('')
       done()
     } catch (reason) {
-      if (active.current) { setError(errorText(reason)); setStatus('') }
+      if (active.current) { setError(formatError(reason)); setStatus('') }
     } finally {
       lock.current = false
       if (active.current) setPending(false)

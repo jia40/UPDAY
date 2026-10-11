@@ -414,3 +414,15 @@ npx --yes firebase-tools deploy --only firestore:rules --project upday-c46af
 `npm test`는 실제 React 화면에서 검증·공백 제거·중복 제출·완료 문구·오류 재시도·공개 경로와 로그인 링크를 검증합니다. Firebase 발송은 테스트 대역으로 대체하므로 실제 메일 수신 검증을 대신하지 않습니다.
 
 참고: [Firebase 비밀번호 재설정 이메일 문서](https://firebase.google.com/docs/auth/web/manage-users#send_a_password_reset_email)
+
+## 취업 지원 기록 및 상태 관리
+
+- `/job`에서 본인의 지원 기록을 최신 등록순으로 조회하고 상태별로 필터링합니다.
+- `/job?new=1`에서 등록, `/job?application=<id>`에서 상세 조회, `&edit=1`에서 수정합니다.
+- 기업명·포지션은 필수이며 각각 1~100자입니다. 공고 URL은 선택 입력으로 최대 2,000자 HTTP/HTTPS 주소를 허용합니다. 지원일은 실제 달력 날짜이며 로컬 오늘까지, 메모는 최대 10,000자입니다.
+- 상태: 관심, 지원 예정, 지원 완료, 서류, 코딩테스트, 면접, 합격, 탈락. 기본값은 관심이며 어느 상태로든 변경할 수 있습니다.
+- `applications` 필드: `userId`, `company`, `position`, `url`, `status`, `appliedAt`(YYYY-MM-DD 또는 빈 문자열), `memo`, `createdAt`, `updatedAt`. 시각은 서버 타임스탬프이며 생성 시각과 소유자는 수정하지 않습니다.
+- 저장 실패 시 입력을 유지하며 같은 ID로 재시도하고, 응답을 잃은 저장은 기존 문서와 비교합니다. 삭제 전 확인하고 작성 중 메뉴 이동·새로고침·로그아웃 시 입력 보호를 제공합니다.
+- 대시보드 집계, 자동 공고 수집, 알림 및 첨부파일은 후속 작업입니다.
+- 사용 전에 대상 프로젝트의 기존 규칙을 보관·비교하여 `firestore.rules`의 applications 규칙을 병합·배포해야 합니다. 프런트엔드 변경만으로 원격 규칙은 적용되지 않습니다. 이번 구현에서는 원격 배포를 수행하지 않습니다.
+- `npm test`는 검증·소유자 조회·CRUD·저장 재시도·필터·작성 보호를 테스트합니다. `npm run test:rules`는 Java 21 이상에서 applications 접근 및 필드 검증을 에뮬레이터로 확인합니다.
