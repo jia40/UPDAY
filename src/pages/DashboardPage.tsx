@@ -50,7 +50,7 @@ function DashboardPage() {
             ) : (
               <div className="summary-card__metric"><span>{card.metric}</span><strong aria-label="집계 준비 중">—</strong></div>
             )}
-            <p className="summary-card__status">{card.id === 'interview' ? '질문 기록 및 복습' : '기록 기능 준비 중'}</p>
+            <p className="summary-card__status">{card.id === 'interview' ? '질문 기록 및 복습' : '지원 기록 및 상태 관리'}</p>
             <p className="summary-card__description">{card.description}</p>
             <a className="summary-card__link" href={card.path}>{card.action} <span aria-hidden="true">→</span></a>
           </section>
