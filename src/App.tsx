@@ -4,7 +4,7 @@ import GuestOnly from './components/auth/GuestOnly'
 import MainLayout from './components/common/MainLayout'
 import { mainPages } from './lib/navigation'
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'))
-const ComingSoonPage = lazy(() => import('./pages/ComingSoonPage'))
+const MyPage = lazy(() => import('./pages/MyPage'))
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const SignupPage = lazy(() => import('./pages/SignupPage'))
@@ -29,10 +29,7 @@ function App() {
       <MainLayout pathname={pathname}>
         <PageLoader key={pathname}>
         {pathname === '/dashboard' ? <DashboardPage /> : pathname === '/today' ? <TodayPage /> : pathname === '/study' ? <StudyPage /> : pathname === '/interview' ? <InterviewPage /> : pathname === '/job' ? <JobPage /> : (
-          <ComingSoonPage
-            title={page?.label ?? '마이페이지'}
-            description={page?.description ?? '내 계정 정보를 확인하는 공간입니다.'}
-          />
+          <MyPage />
         )}</PageLoader>
       </MainLayout>
     )

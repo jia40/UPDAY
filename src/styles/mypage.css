@@ -1,0 +1,20 @@
+.mypage { width: min(100% - 32px, 760px); margin: 0 auto; padding: 32px 0; color: #243d2c; }
+.mypage h1 { font-size: clamp(26px, 4vw, 36px); }
+.mypage-eyebrow { color: #2f8f50; font-weight: 800; letter-spacing: .14em; }
+.mypage-panel { margin-top: 24px; padding: 24px; border: 1px solid #dce7df; border-radius: 16px; background: #fff; }
+.mypage-panel h2 { margin: 0 0 20px; font-size: 22px; }
+.mypage-info { margin: 0; display: grid; gap: 16px; }
+.mypage-info div { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 12px; }
+.mypage-info dt { font-weight: 600; }
+.mypage-info dd { margin: 0; overflow-wrap: anywhere; }
+.mypage fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.mypage label { display: block; margin-bottom: 8px; font-weight: 600; }
+.mypage input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #b8c9bd; border-radius: 8px; font: inherit; }
+.mypage-help { color: #607066; font-size: 13px; line-height: 1.7; }
+.mypage-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.mypage button { min-height: 44px; padding: 10px 14px; border: 1px solid #c9d8cd; border-radius: 8px; background: #f0f6f2; color: #285d37; font: inherit; cursor: pointer; }
+.mypage button[type=submit] { background: #286d3e; color: white; }
+.mypage :disabled { opacity: .65; cursor: not-allowed; }
+.mypage :is(input, button):focus-visible { outline: 2px solid #647268; outline-offset: 3px; }
+.mypage-error { color: #a52f2f; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .mypage { padding: 20px 0; } .mypage-panel { padding: 18px; } }
