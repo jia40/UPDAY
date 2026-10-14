@@ -52,7 +52,7 @@ test('routes import only their page and set titles for direct paths and trailing
     ['/', '로그인', 'LoginPage'], ['/login/', '로그인', 'LoginPage'], ['/signup', '회원가입', 'SignupPage'],
     ['/reset-password/', '비밀번호 재설정', 'ResetPasswordPage'], ['/dashboard', '대시보드', 'DashboardPage'],
     ['/today', '오늘 할 일', 'TodayPage'], ['/study', '학습 기록', 'StudyPage'], ['/interview', '면접 준비', 'InterviewPage'],
-    ['/job', '취업 지원', 'JobPage'], ['/mypage', '마이페이지', 'ComingSoonPage'], ['/missing', '페이지를 찾을 수 없음', null],
+    ['/job', '취업 지원', 'JobPage'], ['/mypage', '마이페이지', 'MyPage'], ['/missing', '페이지를 찾을 수 없음', null],
   ]
   for (const [pathname, title, page] of paths) {
     const imports = []
