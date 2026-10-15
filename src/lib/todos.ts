@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDocsFromServer, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, Timestamp } from 'firebase/firestore'
+import { collection, deleteDoc, doc, documentId, getDocsFromServer, limit, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, Timestamp } from 'firebase/firestore'
 import { db } from './firebase'
 
 export type Todo = { id: string; userId: string; title: string; completed: boolean; date: string; createdAt: Timestamp }
@@ -16,8 +16,23 @@ export async function fetchTodos(userId: string, date: string) {
     .sort((a, b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0) || a.id.localeCompare(b.id))
 }
 export function newTodoId() { return doc(collection(db, 'todos')).id }
-export function createTodo(id: string, userId: string, date: string, title: string) {
-  return setDoc(doc(db, 'todos', id), { userId, date, title: validTitle(title), completed: false, createdAt: serverTimestamp() })
+export async function createTodo(id: string, userId: string, date: string, title: string) {
+  const normalizedTitle = validTitle(title)
+  try {
+    await setDoc(doc(db, 'todos', id), { userId, date, title: normalizedTitle, completed: false, createdAt: serverTimestamp() })
+  } catch (reason) {
+    // A committed write can lose its acknowledgement. Reconcile the same ID
+    // without rewriting immutable creation time or subsequent user changes.
+    let saved: Todo | null = null
+    try {
+      const snapshot = await getDocsFromServer(query(collection(db, 'todos'), where('userId', '==', userId), where(documentId(), '==', id), limit(1)))
+      const item = snapshot.docs[0]
+      if (item) saved = { ...item.data(), id: item.id } as Todo
+    } catch { /* Preserve the original write error when verification fails. */ }
+    if (saved && saved.userId === userId && saved.date === date && saved.title === normalizedTitle) return
+    if (saved) throw new Error('이 할 일은 이미 저장되어 있습니다. 목록을 새로고침해 저장된 내용을 확인해주세요.', { cause: reason })
+    throw reason
+  }
 }
 export function renameTodo(id: string, title: string) { return updateDoc(doc(db, 'todos', id), { title: validTitle(title) }) }
 export function completeTodo(id: string, completed: boolean) { return updateDoc(doc(db, 'todos', id), { completed }) }
