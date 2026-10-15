@@ -11,6 +11,8 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http:
 globalThis.window = dom.window
 globalThis.document = dom.window.document
 globalThis.HTMLElement = dom.window.HTMLElement
+globalThis.Element = dom.window.Element
+globalThis.HTMLAnchorElement = dom.window.HTMLAnchorElement
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.window.navigator })
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 dom.window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
@@ -27,7 +29,7 @@ function loader(mocks = {}, navigate = () => {}) {
     if (cache.has(url.href)) return cache.get(url.href)
     const output = ts.transpileModule(readFileSync(url, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
     const exports = {}
-    const scopedWindow = { location: { get search() { return window.location.search }, assign: navigate }, addEventListener: window.addEventListener.bind(window), removeEventListener: window.removeEventListener.bind(window) }
+    const scopedWindow = { location: { get search() { return window.location.search }, get href() { return window.location.href }, get pathname() { return window.location.pathname }, get origin() { return window.location.origin }, assign: navigate }, addEventListener: window.addEventListener.bind(window), removeEventListener: window.removeEventListener.bind(window) }
     new Function('exports', 'require', 'window', output)(exports, (id) => {
       if (id in mocks) return mocks[id]
       if (id === 'firebase/app') return { FirebaseError }
@@ -91,12 +93,13 @@ test('lost write acknowledgement is reconciled without another document or overw
   await assert.rejects(api.createInterviewQuestion('id', 'owner', { question: 'changed', answer: '', tags: '' }), /이미 저장/)
   await assert.rejects(library({ writeError: new Error('network'), readError: new Error('read') }).api.createInterviewQuestion('id', 'owner', { question: 'q', answer: '', tags: '' }), /network/)
 })
-function mount({ url = '/interview', records = [], detail = null, user = { uid: 'owner' }, loadError, save } = {}) {
+function mount({ url = '/interview', records = [], detail = null, user = { uid: 'owner' }, loadError, save, guard = null } = {}) {
   window.history.replaceState({}, '', url)
   const calls = { list: [], detail: [], save: [], navigate: [] }
   let auth = { user, isLoading: false }
   let failure = loadError
   const Page = loader({
+    './useLogoutGuard': { useLogoutGuard: () => guard },
     '../hooks/useAuth': { useAuth: () => auth },
     '../lib/interviewQuestions': {
       validateInterview: validation.validateInterview, newInterviewId: () => 'new-id',
@@ -238,4 +241,102 @@ test('status failure keeps the saved selection; review refreshes server timestam
   await act(async () => fireEvent.click(view.getByRole('button', { name: '삭제', exact: true })))
   fireEvent.click(view.getByRole('button', { name: '확인', exact: true }))
   assert.deepEqual(view.calls.navigate, ['/interview'])
+})
+
+function unloadBlocked() {
+  const event = new window.Event('beforeunload', { cancelable: true })
+  window.dispatchEvent(event)
+  return event.defaultPrevented
+}
+test('unchanged new and edit forms cancel directly; reverted edits remove protection', async () => {
+  const fresh = mount({ url: '/interview?new=1' })
+  assert.equal(unloadBlocked(), false)
+  fireEvent.click(fresh.getByRole('button', { name: '취소', exact: true }))
+  assert.deepEqual(fresh.calls.navigate, ['/interview'])
+  assert.equal(fresh.queryByRole('dialog'), null)
+  fresh.unmount()
+  const edit = mount({ url: '/interview?question=a&edit=1', detail: record('a') })
+  await edit.findByLabelText('질문 *')
+  assert.equal(unloadBlocked(), false)
+  fireEvent.change(edit.getByLabelText('답변 (선택)'), { target: { value: '새 답변' } })
+  assert.equal(unloadBlocked(), true)
+  fireEvent.change(edit.getByLabelText('답변 (선택)'), { target: { value: '' } })
+  assert.equal(unloadBlocked(), false)
+  fireEvent.click(edit.getByRole('button', { name: '취소', exact: true }))
+  assert.deepEqual(edit.calls.navigate, ['/interview?question=a'])
+})
+test('dirty new form confirms cancel and internal header navigation without losing input', () => {
+  const view = mount({ url: '/interview?new=1' })
+  fireEvent.change(view.getByLabelText('질문 *'), { target: { value: '작성 중' } })
+  assert.equal(unloadBlocked(), true)
+  fireEvent.click(view.getByRole('button', { name: '취소', exact: true }))
+  fireEvent.click(view.getByRole('button', { name: '계속 작성' }))
+  assert.equal(view.getByLabelText('질문 *').value, '작성 중')
+  const link = document.createElement('a'); link.href = '/dashboard'; document.body.append(link)
+  try {
+    fireEvent.click(link)
+    assert.ok(view.getByRole('dialog'))
+    fireEvent.click(view.getByRole('button', { name: '나가기' }))
+    assert.deepEqual(view.calls.navigate, ['http://localhost/dashboard'])
+    assert.equal(unloadBlocked(), false)
+  } finally { link.remove() }
+})
+test('edit list link prompts and cancelling navigation preserves question, answer and tags', async () => {
+  const view = mount({ url: '/interview?question=a&edit=1', detail: record('a') })
+  await view.findByLabelText('질문 *')
+  fireEvent.change(view.getByLabelText('태그 (선택)'), { target: { value: 'React, CS' } })
+  fireEvent.click(view.getByRole('link', { name: '← 목록으로' }))
+  fireEvent.click(view.getByRole('button', { name: '계속 작성' }))
+  assert.equal(view.getByLabelText('태그 (선택)').value, 'React, CS')
+  assert.deepEqual(view.calls.navigate, [])
+})
+test('logout decision cancels or approves and unmount resolves a pending decision', async () => {
+  let check
+  const guard = { register: fn => { check = fn; return () => {} }, loggingOut: false }
+  const view = mount({ url: '/interview?new=1', guard })
+  assert.equal(await check(), true)
+  fireEvent.change(view.getByLabelText('질문 *'), { target: { value: '작성 중' } })
+  let decision
+  act(() => { decision = check() })
+  fireEvent.click(view.getByRole('button', { name: '계속 작성' }))
+  assert.equal(await decision, false)
+  act(() => { decision = check() })
+  fireEvent.click(view.getByRole('button', { name: '나가기' }))
+  assert.equal(await decision, true)
+  act(() => { decision = check() })
+  view.unmount()
+  assert.equal(await decision, false)
+  assert.equal(unloadBlocked(), false)
+})
+test('pending save blocks links, cancel and logout; completion removes protection', async () => {
+  let finish, check
+  const view = mount({ url: '/interview?new=1', save: () => new Promise(resolve => { finish = resolve }), guard: { register: fn => { check = fn; return () => {} }, loggingOut: false } })
+  fireEvent.change(view.getByLabelText('질문 *'), { target: { value: '저장할 질문' } })
+  view.submit()
+  assert.equal(view.getByRole('button', { name: '취소', exact: true }).matches(':disabled'), true)
+  assert.equal(await check(), false)
+  const link = document.createElement('a'); link.href = '/dashboard'; document.body.append(link)
+  try {
+    fireEvent.click(link)
+    assert.equal(view.queryByRole('dialog'), null)
+    assert.deepEqual(view.calls.navigate, [])
+    assert.equal(unloadBlocked(), true)
+    await act(async () => finish())
+    assert.equal(unloadBlocked(), false)
+    assert.equal(await check(), true)
+    fireEvent.click(view.getByRole('button', { name: '질문 보러가기' }))
+    assert.deepEqual(view.calls.navigate, ['/interview?question=new-id'])
+  } finally { link.remove() }
+})
+test('account switch clears draft and pending leave state', () => {
+  let check
+  const view = mount({ url: '/interview?new=1', guard: { register: fn => { check = fn; return () => {} }, loggingOut: false } })
+  fireEvent.change(view.getByLabelText('질문 *'), { target: { value: '이전 계정 입력' } })
+  let decision
+  act(() => { decision = check() })
+  view.setUser({ uid: 'other' })
+  assert.equal(view.getByLabelText('질문 *').value, '')
+  assert.equal(view.queryByRole('dialog'), null)
+  assert.equal(unloadBlocked(), false)
+  return decision.then(value => assert.equal(value, false))
 })
