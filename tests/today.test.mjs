@@ -47,7 +47,7 @@ function mount(options = {}) {
     fetchTodos: async (_uid, date) => options.todos ? options.todos(date) : [{ ...item, date }],
     fetchCarriedTodoIds: async () => options.receipts ? options.receipts() : new Set(),
     carryTodos: async (...args) => { calls.carry.push(args) },
-    createTodo: async (...args) => { calls.create.push(args) },
+    createTodo: async (...args) => { calls.create.push(args); await options.create?.(...args) },
     renameTodo: async (...args) => { calls.rename.push(args) },
     completeTodo: async (...args) => { calls.complete.push(args) },
     removeTodo: async (...args) => { calls.remove.push(args) },
@@ -136,4 +136,24 @@ test('today add, rename, complete and delete remain available without receipt re
   fireEvent.click(view.getByRole('button', { name: '삭제하기' }))
   fireEvent.click(view.getByRole('button', { name: '삭제하기', exact: true }))
   await waitFor(() => assert.deepEqual(view.calls.remove, [['source']]))
+})
+
+test('create failure keeps input and retries the same ID without duplicate submission', async () => {
+  let fail = true, finish
+  const view = mount({ todos: () => [], create: async () => { if (fail) throw new Error('저장 실패'); await new Promise(resolve => { finish = resolve }) } })
+  const input = view.getByLabelText('새 할 일')
+  await waitFor(() => assert.equal(input.disabled, false))
+  fireEvent.change(input, { target: { value: '새 할 일 제목' } })
+  fireEvent.click(view.getByRole('button', { name: '추가' }))
+  await view.findByText('저장 실패')
+  assert.equal(input.value, '새 할 일 제목')
+  fail = false
+  fireEvent.click(view.getByRole('button', { name: '추가' }))
+  await waitFor(() => assert.ok(finish))
+  fireEvent.submit(input.closest('form'))
+  assert.equal(view.calls.create.length, 2)
+  assert.equal(view.calls.create[0][0], view.calls.create[1][0])
+  assert.equal(input.disabled, true)
+  await act(async () => finish())
+  await waitFor(() => assert.equal(input.value, ''))
 })
