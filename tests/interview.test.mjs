@@ -100,6 +100,7 @@ function mount({ url = '/interview', records = [], detail = null, user = { uid: 
   let failure = loadError
   const Page = loader({
     './useLogoutGuard': { useLogoutGuard: () => guard },
+    '../hooks/useToday': { useToday: () => '2026-10-18' },
     '../hooks/useAuth': { useAuth: () => auth },
     '../lib/interviewQuestions': {
       validateInterview: validation.validateInterview, newInterviewId: () => 'new-id',
@@ -339,4 +340,59 @@ test('account switch clears draft and pending leave state', () => {
   assert.equal(view.queryByRole('dialog'), null)
   assert.equal(unloadBlocked(), false)
   return decision.then(value => assert.equal(value, false))
+})
+
+const reviewed = value => ({ toDate: () => new Date(value) })
+test('review eligibility respects local calendar boundaries, leap years, future dates and status', () => {
+  const { needsInterviewReview } = loader({})('../src/lib/interviewReview.ts')
+  const check = (status, lastReviewedAt, today) => needsInterviewReview({ status, lastReviewedAt }, new Date(today))
+  assert.equal(check('unknown', null, '2026-10-18T00:00:00'), true)
+  assert.equal(check('learning', null, '2026-10-18T00:00:00'), true)
+  assert.equal(check('explainable', null, '2026-10-18T00:00:00'), false)
+  assert.equal(check('unknown', reviewed('2026-10-11T23:59:59'), '2026-10-17T23:59:59'), false)
+  assert.equal(check('unknown', reviewed('2026-10-11T23:59:59'), '2026-10-18T00:00:00'), true)
+  assert.equal(check('explainable', reviewed('2020-01-01T00:00:00'), '2026-10-18T00:00:00'), false)
+  assert.equal(check('learning', reviewed('2026-10-19T00:00:00'), '2026-10-18T00:00:00'), false)
+  assert.equal(check('learning', reviewed('2024-02-23T23:59:59'), '2024-03-01T00:00:00'), true)
+  assert.equal(check('learning', reviewed('2025-12-26T23:59:59'), '2026-01-02T00:00:00'), true)
+  assert.equal(check('learning', reviewed('invalid'), '2026-10-18T00:00:00'), false)
+})
+test('review calendar comparison is stable across DST transitions', () => {
+  const previous = process.env.TZ
+  process.env.TZ = 'America/New_York'
+  try {
+    const { needsInterviewReview } = loader({})('../src/lib/interviewReview.ts')
+    assert.equal(needsInterviewReview({ status: 'learning', lastReviewedAt: reviewed('2026-03-07T23:59:59') }, new Date('2026-03-14T00:00:00')), true)
+  } finally { if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous }
+})
+test('list filters intersect status, exact tag and review eligibility, then reset', async () => {
+  const view = mount({ records: [record('a'), { ...record('b'), status: 'learning', tags: ['CS'] }, { ...record('c'), status: 'explainable' }, { ...record('d'), lastReviewedAt: reviewed('2026-10-17T12:00:00') }] })
+  await view.findByText('질문 a')
+  assert.ok(view.getByText('전체 4개 중 4개 표시'))
+  fireEvent.click(view.getByLabelText('복습 대상만 보기'))
+  assert.ok(view.getByText('전체 4개 중 2개 표시'))
+  fireEvent.change(view.getByLabelText('태그 필터'), { target: { value: 'React' } })
+  assert.ok(view.getByText('전체 4개 중 1개 표시'))
+  assert.ok(view.getByText('질문 a'))
+  fireEvent.change(view.getByLabelText('이해 상태 필터'), { target: { value: 'learning' } })
+  assert.ok(view.getByText('조건에 맞는 질문이 없습니다. 필터를 변경하거나 초기화해주세요.'))
+  fireEvent.click(view.getByRole('button', { name: '필터 초기화' }))
+  assert.ok(view.getByText('전체 4개 중 4개 표시'))
+  assert.equal(view.getByLabelText('복습 대상만 보기').checked, false)
+  assert.equal(view.calls.list.length, 1)
+})
+test('restored list re-fetches reviewed questions and retains filters', async () => {
+  const records = [record('a')]
+  const view = mount({ records })
+  await view.findByText('질문 a')
+  fireEvent.click(view.getByLabelText('복습 대상만 보기'))
+  records[0] = { ...records[0], lastReviewedAt: reviewed('2026-10-18T12:00:00') }
+  await act(async () => window.dispatchEvent(new window.PageTransitionEvent('pageshow', { persisted: true })))
+  await view.findByText('전체 1개 중 0개 표시')
+  assert.equal(view.getByLabelText('복습 대상만 보기').checked, true)
+  records[0] = { ...records[0], lastReviewedAt: null, status: 'explainable' }
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+  await act(async () => document.dispatchEvent(new window.Event('visibilitychange')))
+  await waitFor(() => assert.equal(view.calls.list.length, 3))
+  assert.ok(view.getByText('전체 1개 중 0개 표시'))
 })
