@@ -137,7 +137,7 @@ test('saved profile is used by dashboard greeting on next page mount', async () 
   await view.findByText('이름이 저장되었습니다.')
   cleanup()
   const Dashboard = loader({ '../hooks/useAuth': { useAuth: () => ({ user }) }, '../hooks/useToday': { useToday: () => '2026-10-12' },
-    '../components/DashboardStudyCard': { __esModule: true, default: () => null }, '../components/DashboardTodayCard': { __esModule: true, default: () => null },
+    '../components/DashboardCareerCard': { __esModule: true, default: () => null }, '../components/DashboardStudyCard': { __esModule: true, default: () => null }, '../components/DashboardTodayCard': { __esModule: true, default: () => null },
   })('../src/pages/DashboardPage.tsx').default
   const dashboard = render(createElement(Dashboard))
   assert.ok(dashboard.getByText('변경 이름님, 오늘도 한 걸음 성장해볼까요?'))
