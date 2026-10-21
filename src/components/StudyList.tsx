@@ -6,6 +6,7 @@ import { useToday } from '../hooks/useToday'
 import type { StudySummary } from '../lib/studyLogs'
 import { filterStudyLogs, studyLogDate } from '../lib/studyAnalytics'
 import { createStudyHeatmap, studyYears, type StudyPeriod } from '../lib/studyHeatmap'
+import { studyDateFromSearch } from '../lib/studyAnalytics'
 
 type StudyListProps = {
   userId: string
@@ -18,14 +19,14 @@ type StudyListProps = {
 
 export default function StudyList({ userId, overview, revision, loading, error, reload }: StudyListProps) {
   const today = useToday()
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => studyDateFromSearch(window.location.search, today))
   const [selectedTag, setSelectedTag] = useState('')
-  const [period, setPeriod] = useState<StudyPeriod>('recent')
+  const [period, setPeriod] = useState<StudyPeriod>(() => selectedDate ? Number(selectedDate.slice(0, 4)) : 'recent')
   const dates = useMemo(() => overview.map(studyLogDate), [overview])
   const years = useMemo(() => studyYears(dates, today), [dates, today])
   const activePeriod = typeof period === 'number' && !years.includes(period) ? 'recent' : period
   const heatmap = useMemo(() => createStudyHeatmap(dates, today, activePeriod), [dates, today, activePeriod])
-  const filterDate = selectedDate && selectedDate >= heatmap.days[0].date && selectedDate <= heatmap.days[heatmap.days.length - 1].date ? selectedDate : null
+  const filterDate = selectedDate
   const tags = useMemo(() => [...new Set(overview.flatMap((log) => log.tags))].sort((a, b) => a.localeCompare(b, 'ko')), [overview])
   const filterTag = tags.includes(selectedTag) ? selectedTag : ''
   const visibleLogs = filterStudyLogs(overview, filterDate, filterTag)

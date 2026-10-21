@@ -55,6 +55,7 @@ function mount(options = {}) {
   }
   const page = loader({
     '../lib/todos': api,
+    '../components/TodayStudySummary': { __esModule: true, default: () => null },
     '../hooks/useAuth': { useAuth: () => ({ user: { uid: 'owner' }, isLoading: false }) },
     '../hooks/useToday': { useToday: () => '2026-09-30' },
   })('../src/pages/TodayPage.tsx')

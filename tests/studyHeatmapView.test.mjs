@@ -144,3 +144,15 @@ test('this month clears date filters, shows its count and rolls into the next mo
   assert.equal(view.container.querySelectorAll('.study-heatmap__day').length, 1)
   assert.equal(view.requests(), 1)
 })
+
+test('Today date link opens the exact Study list even outside recent-year range', async () => {
+  window.history.replaceState({}, '', '/study?date=2024-02-29')
+  try {
+    const view = mount()
+    await waitFor(() => assert.ok(view.getAllByText('2024-02-29 · 학습 기록 1개').length))
+    await view.findByText('기록 2024-02-29')
+    assert.equal(view.queryByText('기록 2025-12-31'), null)
+    fireEvent.click(view.getByRole('button', { name: '필터 해제' }))
+    await view.findByText('기록 2025-12-31')
+  } finally { window.history.replaceState({}, '', '/study') }
+})

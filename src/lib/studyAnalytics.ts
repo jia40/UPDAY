@@ -65,3 +65,9 @@ export function formatStudyTime(total: number) {
   const minutes = total % 60
   return [hours ? `${hours}시간` : '', minutes ? `${minutes}분` : ''].filter(Boolean).join(' ') || '0분'
 }
+
+export function studyDateFromSearch(search: string, today: string): string | null {
+  const date = new URLSearchParams(search).get('date')
+  if (!date) return null
+  try { return validateStudyDate(date, today) } catch { return null }
+}

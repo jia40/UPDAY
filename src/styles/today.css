@@ -386,3 +386,7 @@
   font-size: 13px;
   line-height: 1.4;
 }
+.today-study-total { font-size: 28px; font-weight: 700; color: #286d3e; }
+.today-study-links { display: flex; flex-wrap: wrap; gap: 12px; }
+.today-study-links a { display: inline-flex; align-items: center; min-height: 44px; color: #285d37; text-underline-offset: 3px; }
+.today-study :is(a, button):focus-visible { outline: 2px solid #647268; outline-offset: 3px; }

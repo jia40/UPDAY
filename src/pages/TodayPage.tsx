@@ -1,5 +1,6 @@
 import ConfirmModal from '../components/common/ConfirmModal'
 import CompleteModal from '../components/common/CompleteModal'
+import TodayStudySummary from '../components/TodayStudySummary'
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { FirebaseError } from 'firebase/app'
 import { useAuth } from '../hooks/useAuth'
@@ -151,6 +152,7 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
         }} />
         <button type="button" disabled={!history || pending || carryConfirm || deleteTarget !== null} onClick={() => onDateChange(today)}>오늘로</button>
       </div>
+      <TodayStudySummary userId={userId} date={date} />
       <section className="today-panel" aria-label="날짜별 할 일 관리" aria-busy={loading || pending}>
         <div className="today-summary"><h2>{history ? '지난 할 일' : '오늘 할 일'}</h2><span>{unavailable ? '집계 대기 중' : `${completed} / ${todos.length} 완료 · ${progress}%`}</span></div>
         {!unavailable && <progress max={100} value={progress} aria-label="선택한 날짜의 할 일 완료율" />}
