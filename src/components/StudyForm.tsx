@@ -7,6 +7,7 @@ import { errorText } from '../lib/studyErrors'
 import { effectiveStudyDate } from '../lib/studyAnalytics'
 import { createStudyLog, newStudyId, updateStudyLog, validateStudy, type StudyInput, type StudyLog } from '../lib/studyLogs'
 import { useLogoutGuard } from '../hooks/useLogoutGuard'
+import { studyDateFromSearch } from '../lib/studyAnalytics'
 
 const empty: StudyInput = { title: '', content: '', tags: '', studyMinutes: '', studyDate: '' }
 export default function StudyForm({ userId, record }: { userId: string; record?: StudyLog }) {
@@ -16,7 +17,7 @@ export default function StudyForm({ userId, record }: { userId: string; record?:
   const [initialForm] = useState(() => record ? {
     title: record.title, content: record.content, tags: record.tags.join(', '), studyMinutes: String(record.studyMinutes),
     studyDate: effectiveStudyDate(record) ?? '', hours: String(Math.floor(record.studyMinutes / 60)), minutes: String(record.studyMinutes % 60),
-  } : { ...empty, studyDate: today, hours: '', minutes: '' })
+  } : { ...empty, studyDate: studyDateFromSearch(window.location.search, today) ?? today, hours: '', minutes: '' })
   const [input, setInput] = useState<StudyInput>(() => ({ title: initialForm.title, content: initialForm.content, tags: initialForm.tags, studyMinutes: initialForm.studyMinutes, studyDate: initialForm.studyDate }))
   const [hours, setHours] = useState(initialForm.hours)
   const [minutes, setMinutes] = useState(initialForm.minutes)
