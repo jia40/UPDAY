@@ -27,7 +27,9 @@ function mount(pathname) {
     new Function('exports', 'require', 'window', output)(exports, id => mocks[id] ?? require(id), browser)
     return exports
   }
-  const guard = load('../src/components/auth/GuestOnly.tsx', {
+  const hooks = load('../src/hooks/useAuth.ts', {})
+  const provider = load('../src/components/auth/AuthProvider.tsx', {
+    '../../hooks/useAuth': hooks,
     '../../lib/firebase': { auth: {} },
     'firebase/auth': { onAuthStateChanged: (_auth, next, error) => {
       const subscription = { next, error, closed: false }
@@ -35,6 +37,7 @@ function mount(pathname) {
       return () => { subscription.closed = true }
     } },
   })
+  const guard = load('../src/components/auth/GuestOnly.tsx', { '../../hooks/useAuth': hooks })
   const mocks = {
     './components/common/PageLoader': { __esModule: true, default: ({ children }) => children },
     './components/auth/GuestOnly': guard,
@@ -45,7 +48,7 @@ function mount(pathname) {
     mocks[`./pages/${page}`] = { __esModule: true, default: () => createElement('div', null, page) }
   }
   const app = load('../src/App.tsx', mocks)
-  const view = render(createElement(StrictMode, null, createElement(app.default)))
+  const view = render(createElement(StrictMode, null, createElement(provider.default, null, createElement(app.default))))
   return { ...view, navigations, subscriptions, reloads: () => reloads,
     emit: user => act(() => subscriptions.filter(s => !s.closed).forEach(s => s.next(user))),
     fail: () => act(() => subscriptions.filter(s => !s.closed).forEach(s => s.error(new Error('auth failed')))),
