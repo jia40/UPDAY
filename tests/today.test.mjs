@@ -60,7 +60,7 @@ function mount(options = {}) {
     '../hooks/useToday': { useToday: () => '2026-09-30' },
   })('../src/pages/TodayPage.tsx')
   const view = render(createElement(page.default))
-  const past = () => fireEvent.change(view.container.querySelector('#todo-date'), { target: { value: '2026-09-29' } })
+  const past = () => fireEvent.change(view.getByLabelText('할 일 조회 날짜'), { target: { value: '2026-09-29' } })
   return { ...view, options, calls, past }
 }
 
@@ -157,4 +157,23 @@ test('create failure keeps input and retries the same ID without duplicate submi
   assert.equal(input.disabled, true)
   await act(async () => finish())
   await waitFor(() => assert.equal(input.value, ''))
+})
+
+test('labeled date picker preserves past navigation, future limit and today reset', async () => {
+  const dates = []
+  const view = mount({ todos: date => { dates.push(date); return [] } })
+  const dateInput = () => view.getByLabelText('할 일 조회 날짜')
+  assert.equal(dateInput().type, 'date')
+  assert.equal(dateInput().min, '0001-01-01')
+  assert.equal(dateInput().max, '2026-09-30')
+  assert.equal(dateInput().tabIndex, 0)
+  await view.findByText('아직 등록한 할 일이 없어요.')
+  fireEvent.change(dateInput(), { target: { value: '2026-10-01' } })
+  assert.deepEqual(dates, ['2026-09-30'])
+  fireEvent.change(dateInput(), { target: { value: '2026-09-29' } })
+  await view.findByText('이 날짜에 등록한 할 일이 없어요.')
+  assert.equal(dateInput().value, '2026-09-29')
+  fireEvent.click(view.getByRole('button', { name: '오늘로', exact: true }))
+  await view.findByText('아직 등록한 할 일이 없어요.')
+  assert.equal(dateInput().value, '2026-09-30')
 })
