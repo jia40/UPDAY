@@ -14,6 +14,7 @@ function profileError(reason: unknown) {
   return reason instanceof Error ? reason.message : '이름을 저장하지 못했습니다. 다시 시도해주세요.'
 }
 function Account({ user }: { user: User }) {
+  const { refreshProfile } = useAuth()
   const [savedName, setSavedName] = useState(user.displayName?.trim() ?? '')
   const [name, setName] = useState(savedName)
   const [message, setMessage] = useState('')
@@ -32,6 +33,7 @@ function Account({ user }: { user: User }) {
     void mutate(async () => {
       if (auth.currentUser?.uid !== user.uid) throw new Error('로그인 상태가 변경되었습니다. 다시 로그인해주세요.')
       await updateProfile(user, { displayName: value })
+      refreshProfile(user)
     }, () => { setSavedName(value); setName(value); setMessage('이름이 저장되었습니다.') })
   }
   return <section className="mypage" aria-labelledby="mypage-heading">

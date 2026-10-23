@@ -1,31 +1,10 @@
-import { useEffect, useState } from 'react'
-import { onAuthStateChanged, type User } from 'firebase/auth'
-import { auth } from '../lib/firebase'
+import { createContext, useContext } from 'react'
+import type { User } from 'firebase/auth'
 
-type AuthState = {
-  user: User | null
-  isLoading: boolean
-  error: string | null
-}
-
+export type AuthState = { user: User | null; isLoading: boolean; error: string | null; refreshProfile: (user: User) => void }
+export const AuthContext = createContext<AuthState | null>(null)
 export function useAuth() {
-  const [state, setState] = useState<AuthState>({
-    user: null,
-    isLoading: true,
-    error: null,
-  })
-
-  useEffect(() => {
-    return onAuthStateChanged(
-      auth,
-      (user) => setState({ user, isLoading: false, error: null }),
-      () => setState({
-        user: null,
-        isLoading: false,
-        error: '로그인 상태를 확인하지 못했습니다. 새로고침 후 다시 시도해주세요.',
-      }),
-    )
-  }, [])
-
+  const state = useContext(AuthContext)
+  if (!state) throw new Error('useAuth는 AuthProvider 내부에서 사용해야 합니다.')
   return state
 }

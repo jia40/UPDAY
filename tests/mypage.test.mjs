@@ -44,7 +44,7 @@ function loader(mocks = {}, navigate = () => {}) {
 }
 
 function mount({ user = { uid: 'owner', displayName: '기존 이름', email: 'owner@example.com', metadata: { creationTime: '2026-10-01T00:00:00Z' } }, save = async () => {}, guard = null } = {}) {
-  let state = { user, isLoading: false, error: null }
+  let state = { user, isLoading: false, error: null, refreshProfile: () => {} }
   const firebaseAuth = { currentUser: user }
   const calls = []
   const module = loader({ '../hooks/useAuth': { useAuth: () => state }, '../lib/firebase': { auth: firebaseAuth },
