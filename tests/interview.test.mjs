@@ -99,6 +99,16 @@ function mount({ url = '/interview', records = [], detail = null, user = { uid: 
   let auth = { user, isLoading: false }
   let failure = loadError
   const Page = loader({
+    '../lib/interviewPagination': {
+      fetchInterviewOverview: async uid => { calls.list.push(uid); if (failure) throw failure; return records },
+      fetchInterviewPage: async (_uid, filters, today, cursor, overview) => {
+        const { filterInterviewQuestions } = loader({})('../src/lib/interviewReview.ts')
+        const matches = filterInterviewQuestions(overview, filters, new Date(today + 'T12:00:00'))
+        const start = cursor ? matches.findIndex(item => item.id === cursor.id) + 1 : 0
+        const items = matches.slice(start, start + 20)
+        return { items, cursor: items.at(-1), hasMore: matches.length > start + 20 }
+      },
+    },
     './useLogoutGuard': { useLogoutGuard: () => guard },
     '../hooks/useToday': { useToday: () => '2026-10-18' },
     '../hooks/useAuth': { useAuth: () => auth },
@@ -146,7 +156,7 @@ test('query errors allow retry and permission errors do not show records', async
   assert.equal(view.queryByText('질문 a'), null)
   view.recover()
   fireEvent.click(view.getByRole('button', { name: '다시 불러오기' }))
-  await waitFor(() => assert.ok(view.getByText('질문 a')))
+  await view.findByText('질문 a')
 })
 test('form saves an unanswered question once, locks while pending, and links to created detail', async () => {
   let resolve
@@ -368,17 +378,18 @@ test('review calendar comparison is stable across DST transitions', () => {
 test('list filters intersect status, exact tag and review eligibility, then reset', async () => {
   const view = mount({ records: [record('a'), { ...record('b'), status: 'learning', tags: ['CS'] }, { ...record('c'), status: 'explainable' }, { ...record('d'), lastReviewedAt: reviewed('2026-10-17T12:00:00') }] })
   await view.findByText('질문 a')
-  assert.ok(view.getByText('전체 4개 중 4개 표시'))
+  assert.ok(view.getByText('전체 4개 · 조건 일치 4개'))
   fireEvent.click(view.getByLabelText('복습 대상만 보기'))
-  assert.ok(view.getByText('전체 4개 중 2개 표시'))
+  assert.ok(view.getByText('전체 4개 · 조건 일치 2개'))
   fireEvent.change(view.getByLabelText('태그 필터'), { target: { value: 'React' } })
-  assert.ok(view.getByText('전체 4개 중 1개 표시'))
-  assert.ok(view.getByText('질문 a'))
+  assert.ok(view.getByText('전체 4개 · 조건 일치 1개'))
+  await view.findByText('질문 a')
   fireEvent.change(view.getByLabelText('이해 상태 필터'), { target: { value: 'learning' } })
   assert.ok(view.getByText('조건에 맞는 질문이 없습니다. 필터를 변경하거나 초기화해주세요.'))
   fireEvent.click(view.getByRole('button', { name: '필터 초기화' }))
-  assert.ok(view.getByText('전체 4개 중 4개 표시'))
+  assert.ok(view.getByText('전체 4개 · 조건 일치 4개'))
   assert.equal(view.getByLabelText('복습 대상만 보기').checked, false)
+  await view.findByText('현재 4개 표시')
   assert.equal(view.calls.list.length, 1)
 })
 test('restored list re-fetches reviewed questions and retains filters', async () => {
@@ -388,11 +399,11 @@ test('restored list re-fetches reviewed questions and retains filters', async ()
   fireEvent.click(view.getByLabelText('복습 대상만 보기'))
   records[0] = { ...records[0], lastReviewedAt: reviewed('2026-10-18T12:00:00') }
   await act(async () => window.dispatchEvent(new window.PageTransitionEvent('pageshow', { persisted: true })))
-  await view.findByText('전체 1개 중 0개 표시')
+  await view.findByText('전체 1개 · 조건 일치 0개')
   assert.equal(view.getByLabelText('복습 대상만 보기').checked, true)
   records[0] = { ...records[0], lastReviewedAt: null, status: 'explainable' }
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
   await act(async () => document.dispatchEvent(new window.Event('visibilitychange')))
   await waitFor(() => assert.equal(view.calls.list.length, 3))
-  assert.ok(view.getByText('전체 1개 중 0개 표시'))
+  assert.ok(view.getByText('전체 1개 · 조건 일치 0개'))
 })
