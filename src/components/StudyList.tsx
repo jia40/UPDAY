@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import StudyHeatmap from './StudyHeatmap'
 import StudyWeeklyStats from './StudyWeeklyStats'
+import StudyMonthlyStats from './StudyMonthlyStats'
 import StudyRecordList from './StudyRecordList'
 import { useToday } from '../hooks/useToday'
 import type { StudySummary } from '../lib/studyLogs'
@@ -39,6 +40,7 @@ export default function StudyList({ userId, overview, revision, loading, error, 
     <StudyHeatmap data={heatmap} selectedDate={filterDate} onSelect={setSelectedDate}
       period={activePeriod} years={years} onPeriodChange={(value) => { setPeriod(value); setSelectedDate(null) }} />
     <StudyWeeklyStats logs={overview} today={today} />
+    <StudyMonthlyStats logs={overview} today={today} />
     <section className="study-panel" aria-label="학습 기록 목록">
       <div className="study-filter">
         <button type="button" onClick={() => reload()}>학습 기록 새로고침</button>

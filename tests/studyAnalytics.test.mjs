@@ -186,12 +186,13 @@ function mount({ logs = [], url = '/study', fail = false } = {}) {
   window.history.replaceState({}, '', url)
   let today = '2026-09-23'
   const saved = []
+  let overviewRequests = 0
   const { api } = apiHarness()
   const Page = loader({
     '../hooks/useAuth': { useAuth: () => ({ user: { uid: 'owner' } }) },
     '../hooks/useToday': { useToday: () => today },
     '../lib/studyLogs': {
-      fetchStudyOverview: async () => { if (fail) throw new Error('조회 실패'); return logs },
+      fetchStudyOverview: async () => { overviewRequests++; if (fail) throw new Error('조회 실패'); return logs },
       fetchStudyLog: async (_user, id) => { if (fail) throw new Error('조회 실패'); return logs.find(log => log.id === id) ?? null },
       fetchStudyPage: async (_user, date, tag) => {
         const matching = filterStudyLogs(logs, date, tag)
@@ -205,7 +206,7 @@ function mount({ logs = [], url = '/study', fail = false } = {}) {
     './common/CompleteModal': { __esModule: true, default: () => null },
   })('../src/pages/StudyPage.tsx').default
   const view = render(createElement(Page))
-  return { ...view, saved, setToday: (value) => { today = value; view.rerender(createElement(Page)) } }
+  return { ...view, saved, overviewRequests: () => overviewRequests, setToday: (value) => { today = value; view.rerender(createElement(Page)) } }
 }
 
 test('tag and date filters compose without changing weekly totals; navigation crosses weeks', async () => {
@@ -348,3 +349,24 @@ for (const changed of [{ userId: 'other', date: '2026-09-23' }, { userId: 'owner
     assert.ok(view.getByText('0일'))
   })
 }
+
+test('monthly totals ignore list tag/date filters and month navigation makes no overview requests', async () => {
+  const view = mount({ logs: [record('React 공부', '2026-09-21', 30, ['React']), record('CS 공부', '2026-09-22', 60, ['CS']), record('지난달 공부', '2026-08-31', 15, ['React'])] })
+  const month = within(await view.findByRole('region', { name: '월간 학습 통계' }))
+  assert.ok(month.getByText('1시간 30분'))
+  assert.ok(month.getByText('2개'))
+  assert.ok(month.getByText('2일'))
+  await act(async () => { fireEvent.change(view.getByLabelText('태그 필터'), { target: { value: 'React' } }) })
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: '2026-09-21 · 학습 기록 1개' })) })
+  assert.ok(month.getByText('1시간 30분'))
+  await act(async () => { fireEvent.click(month.getByRole('button', { name: '이전 달' })) })
+  assert.ok(month.getByText('15분'))
+  await act(async () => { fireEvent.click(month.getByRole('button', { name: '이번 달' })) })
+  assert.ok(month.getByText('1시간 30분'))
+  assert.equal(view.overviewRequests(), 1)
+})
+test('failed metadata query does not render monthly zero statistics', async () => {
+  const view = mount({ fail: true })
+  await view.findByText('조회 실패')
+  assert.equal(view.queryByRole('region', { name: '월간 학습 통계' }), null)
+})
