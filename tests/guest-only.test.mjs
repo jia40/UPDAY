@@ -29,6 +29,7 @@ function mount(pathname) {
   }
   const hooks = load('../src/hooks/useAuth.ts', {})
   const provider = load('../src/components/auth/AuthProvider.tsx', {
+    '../../lib/studyOverviewCache': { invalidateStudyOverview: () => {} },
     '../../hooks/useAuth': hooks,
     '../../lib/firebase': { auth: {} },
     'firebase/auth': { onAuthStateChanged: (_auth, next, error) => {

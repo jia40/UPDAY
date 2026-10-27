@@ -89,7 +89,7 @@ test('tag/date intersection, clearing, and date edits affect filters, heatmap, s
 
 function apiHarness(overrides = {}) {
   const calls = []
-  const api = loader({ './firebase': { db: {} }, 'firebase/firestore': {
+  const api = loader({ './firebase': { db: {}, auth: { currentUser: { uid: 'owner' } } }, 'firebase/firestore': {
     collection: (_db, name) => name, doc: (...args) => args.join('/'),
     serverTimestamp: () => 'server-time', setDoc: async (...args) => calls.push(['create', ...args]),
     updateDoc: async (...args) => calls.push(['update', ...args]),

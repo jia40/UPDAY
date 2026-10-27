@@ -17,11 +17,11 @@ function StudySummary({ userId, date }: { userId?: string; date: string }) {
     if (!userId) return
     let active = true
     let pending = false
-    const refresh = async () => {
+    const refresh = async (force = false) => {
       if (!active || pending) return
       pending = true
       try {
-        const logs = await fetchStudyOverview(userId)
+        const logs = await fetchStudyOverview(userId, { force })
         if (!active) return
         setSummary(calculateStudyStreak(logs.map(studyLogDate), date))
         setError(false)
@@ -34,16 +34,17 @@ function StudySummary({ userId, date }: { userId?: string; date: string }) {
     const onVisible = () => {
       if (document.visibilityState === 'visible') void refresh()
     }
-    void refresh()
-    window.addEventListener('focus', refresh)
-    window.addEventListener('online', refresh)
-    window.addEventListener('pageshow', refresh)
+    const refreshEvent = () => { void refresh() }
+    void refresh(retry > 0)
+    window.addEventListener('focus', refreshEvent)
+    window.addEventListener('online', refreshEvent)
+    window.addEventListener('pageshow', refreshEvent)
     document.addEventListener('visibilitychange', onVisible)
     return () => {
       active = false
-      window.removeEventListener('focus', refresh)
-      window.removeEventListener('online', refresh)
-      window.removeEventListener('pageshow', refresh)
+      window.removeEventListener('focus', refreshEvent)
+      window.removeEventListener('online', refreshEvent)
+      window.removeEventListener('pageshow', refreshEvent)
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [userId, date, retry])
@@ -73,6 +74,7 @@ function StudySummary({ userId, date }: { userId?: string; date: string }) {
         </>
       )}
       <a className="summary-card__link" href="/study">{ready && !summary.hasRecords ? '학습 기록 시작하기' : '학습 기록 보러가기'} <span aria-hidden="true">→</span></a>
+      {ready && <button type="button" className="summary-card__retry" onClick={() => { setSummary(null); setError(false); setRetry(value => value + 1) }}>통계 새로고침</button>}
     </section>
   )
 }
