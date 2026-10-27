@@ -2,6 +2,7 @@ import { collection, doc, documentId, getDocsFromServer, query, where, orderBy, 
 import { FirebaseError } from 'firebase/app'
 import { auth, db } from './firebase'
 import { effectiveStudyDate, validateStudyDate } from './studyAnalytics'
+import { cachedStudyOverview, invalidateStudyOverview } from './studyOverviewCache'
 
 export type StudyInput = { title: string; content: string; tags: string; studyMinutes: string; studyDate: string }
 export type StudyLog = { id: string; userId: string; title: string; content: string; tags: string[]; studyMinutes: number; studyDate?: string; createdAt: Timestamp }
@@ -39,7 +40,14 @@ export async function fetchStudyPage(userId: string, date: string | null, tag: s
 
 // The Web SDK has no field projection. REST uses the same Firebase ID token and
 // security rules, returning only statistics fields, never titles or full content.
-export async function fetchStudyOverview(userId: string): Promise<StudySummary[]> {
+export async function fetchStudyOverview(userId: string, options: { force?: boolean } = {}): Promise<StudySummary[]> {
+  const user = auth.currentUser
+  if (!user || user.uid !== userId) throw new FirebaseError('permission-denied', '로그인 상태를 확인해주세요.')
+  const result = await cachedStudyOverview(userId, () => requestStudyOverview(userId), options.force)
+  if (auth.currentUser !== user) throw new FirebaseError('permission-denied', '로그인 상태가 변경되었습니다.')
+  return result.map(item => ({ ...item, tags: [...item.tags] }))
+}
+async function requestStudyOverview(userId: string): Promise<StudySummary[]> {
   const user = auth.currentUser
   if (!user || user.uid !== userId) throw new FirebaseError('permission-denied', '로그인 상태를 확인해주세요.')
   const endpoint = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(db.app.options.projectId!)}/databases/(default)/documents:runQuery`
@@ -54,8 +62,11 @@ export async function fetchStudyOverview(userId: string): Promise<StudySummary[]
   let response = await request(false)
   if (response.status === 401) response = await request(true)
   if (!response.ok) throw new FirebaseError(response.status === 403 || response.status === 401 ? 'permission-denied' : 'unavailable', '학습 통계를 불러오지 못했습니다.')
+  if (auth.currentUser !== user) throw new FirebaseError('permission-denied', '로그인 상태가 변경되었습니다.')
   type Value = { stringValue?: string; timestampValue?: string; integerValue?: string; arrayValue?: { values?: Value[] } }
-  const rows: { document?: { name: string; fields: Record<string, Value> } }[] = await response.json()
+  const rows: { document?: { name: string; fields: Record<string, Value> }; error?: unknown }[] = await response.json()
+  if (auth.currentUser !== user) throw new FirebaseError('permission-denied', '로그인 상태가 변경되었습니다.')
+  if (!Array.isArray(rows) || rows.some(row => row.error)) throw new Error('학습 통계 응답을 확인하지 못했습니다.')
   return rows.flatMap(({ document }) => {
     if (!document) return []
     const data = document.fields
@@ -87,18 +98,25 @@ export async function createStudyLog(id: string, userId: string, input: StudyInp
   const values = validateStudy(input)
   try {
     await setDoc(doc(db, 'studyLogs', id), { ...values, userId, createdAt: serverTimestamp() })
+    invalidateStudyOverview(userId)
   } catch (reason) {
     // A lost acknowledgement may leave a saved record whose createdAt cannot be rewritten.
     let saved: StudyLog | null = null
     try { saved = await fetchStudyLog(userId, id) } catch { /* Preserve the original save error. */ }
     if (saved && saved.userId === userId && saved.title === values.title && saved.content === values.content
       && saved.studyDate === values.studyDate && saved.studyMinutes === values.studyMinutes
-      && JSON.stringify(saved.tags) === JSON.stringify(values.tags)) return
+      && JSON.stringify(saved.tags) === JSON.stringify(values.tags)) { invalidateStudyOverview(userId); return }
     if (saved) throw new Error('이 학습 기록은 이미 저장되어 있습니다. 목록에서 저장된 내용을 확인해주세요.', { cause: reason })
     throw reason
   }
 }
 export function updateStudyLog(id: string, input: StudyInput) {
-  return updateDoc(doc(db, 'studyLogs', id), validateStudy(input))
+  const values = validateStudy(input)
+  const userId = auth.currentUser?.uid
+  return updateDoc(doc(db, 'studyLogs', id), values).then(() => { invalidateStudyOverview(userId) })
 }
-export function deleteStudyLog(id: string) { return deleteDoc(doc(db, 'studyLogs', id)) }
+export async function deleteStudyLog(id: string) {
+  const userId = auth.currentUser?.uid
+  await deleteDoc(doc(db, 'studyLogs', id))
+  invalidateStudyOverview(userId)
+}

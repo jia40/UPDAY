@@ -13,9 +13,9 @@ function StudyScreen({ userId, selected, formView }: { userId: string; selected:
       {!formView && !selected && <a className="study-page-link" href="/study?new=1">새 학습 기록</a>}
     </div></header>
     {selected && !formView && <a className="study-back" href="/study">← 목록으로</a>}
-    <div className="study-grid">
+      <div className="study-grid">
       {!formView && !selected ? <StudyList userId={userId} overview={overview} revision={revision} loading={loading} error={error} reload={reload} />
-        : loading ? <p role="status">학습 기록을 불러오고 있습니다.</p> : error ? <div className="study-panel" role="alert"><p>{error}</p><button type="button" onClick={reload}>다시 불러오기</button></div>
+        : loading ? <p role="status">학습 기록을 불러오고 있습니다.</p> : error ? <div className="study-panel" role="alert"><p>{error}</p><button type="button" onClick={() => reload()}>다시 불러오기</button></div>
         : selected && !record ? <section className="study-panel"><p>학습 기록을 찾을 수 없거나 접근 권한이 없습니다.</p><a href="/study">목록으로</a></section>
         : formView ? <StudyForm key={record?.id ?? 'new'} userId={userId} record={record ?? undefined} />
         : record && <StudyDetail key={record.id} record={record} />}
