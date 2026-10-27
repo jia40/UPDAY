@@ -38,7 +38,7 @@ function mount({ edit = false, detail = false, save = async () => {}, logs, logo
       if (id.endsWith('/useAuth')) return { useAuth: () => ({ user: { uid: userId }, isLoading: false }) }
       if (id.endsWith('/useToday')) return { useToday: () => '2026-10-02' }
       if (id.endsWith('/studyLogs')) return { fetchStudyLog: async () => logs ? (await logs(userId))[0] ?? null : record, fetchStudyOverview: () => { throw new Error('Form must not fetch overview') }, validateStudy: () => {}, newStudyId: () => 'new', createStudyLog: save, updateStudyLog: save, deleteStudyLog: save }
-      if (id.endsWith('/StudyHeatmap') || id.endsWith('/StudyWeeklyStats')) return { __esModule: true, default: () => null }
+      if (id.endsWith('/StudyHeatmap') || id.endsWith('/StudyWeeklyStats') || id.endsWith('/StudyMonthlyStats')) return { __esModule: true, default: () => null }
       if (id.startsWith('.')) return load(new URL(id, url).href)
       return require(id)
     }, scopedWindow)

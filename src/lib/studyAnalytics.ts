@@ -56,6 +56,36 @@ export function weeklyStudySummary(logs: readonly StudyEntry[], anchor: string) 
   }
 }
 
+export function shiftStudyMonth(month: string, amount: number): string {
+  if (!/^\d{4}-\d{2}$/.test(month) || !Number.isInteger(amount)) throw new Error('올바른 학습 월을 선택해주세요.')
+  const date = parseStudyDate(month + '-01')
+  date.setMonth(date.getMonth() + amount)
+  const result = studyDateKey(date)
+  if (!result || date.getFullYear() < 1 || date.getFullYear() > 9999) throw new Error('선택할 수 없는 학습 월입니다.')
+  return result.slice(0, 7)
+}
+
+export function monthlyStudySummary(logs: readonly StudyEntry[], month: string, today: string) {
+  parseStudyDate(today)
+  const validMonth = shiftStudyMonth(month, 0)
+  if (validMonth > today.slice(0, 7)) throw new Error('이번 달 또는 지난 달을 선택해주세요.')
+  const start = validMonth + '-01'
+  const last = parseStudyDate(start)
+  last.setMonth(last.getMonth() + 1, 0)
+  const end = validMonth === today.slice(0, 7) ? today : studyDateKey(last)!
+  const days = new Set<string>()
+  let minutes = 0
+  let records = 0
+  for (const log of logs) {
+    const date = effectiveStudyDate(log)
+    if (!date || date < start || date > end) continue
+    minutes += log.studyMinutes
+    records++
+    days.add(date)
+  }
+  return { start, end, minutes, records, studiedDays: days.size }
+}
+
 export function filterStudyLogs<T extends StudyEntry>(logs: readonly T[], date: string | null, tag: string): T[] {
   return logs.filter((log) => (!date || effectiveStudyDate(log) === date) && (!tag || log.tags.includes(tag)))
 }

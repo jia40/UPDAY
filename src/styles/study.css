@@ -358,7 +358,7 @@
   outline: 2px solid #647268;
   outline-offset: 3px;
 }
-.study-weekly h2 { margin: 0; }
+.study-weekly h2, .study-monthly h2 { margin: 0; }
 .study-weekly-totals {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
