@@ -1,5 +1,5 @@
 import { collection, getDocsFromServer, query, where } from 'firebase/firestore'
-import { db } from './firebase'
+import { db } from './firestore'
 import { validateStudyDate } from './studyAnalytics'
 
 export async function fetchDailyStudyMinutes(userId: string, date: string) {

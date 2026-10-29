@@ -45,7 +45,7 @@ function loader(mocks = {}, navigate = () => {}) {
 const record = (id, answer = '', time = 1) => ({ id, userId: 'owner', question: `질문 ${id}`, answer, tags: ['React'], status: 'unknown', lastReviewedAt: null, createdAt: { toMillis: () => time, toDate: () => new Date('2026-09-28T12:00:00') } })
 function library({ records = [], writeError, readError } = {}) {
   const calls = { reads: [], writes: [] }
-  const api = loader({ './firebase': { db: {} }, 'firebase/firestore': {
+  const api = loader({ './firestore': { db: {} }, 'firebase/firestore': {
     collection: (_db, name) => name, doc: (...args) => args.length === 1 ? { id: 'new-id' } : args.slice(1).join('/'),
     documentId: () => '__name__', where: (...args) => args, limit: value => ['limit', value], query: (...args) => args,
     serverTimestamp: () => 'server-time',

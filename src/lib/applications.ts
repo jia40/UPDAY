@@ -1,5 +1,5 @@
 import { collection, doc, documentId, getDocsFromServer, query, where, limit, setDoc, updateDoc, deleteDoc, serverTimestamp, type Timestamp } from 'firebase/firestore'
-import { db } from './firebase'
+import { db } from './firestore'
 import { validateStudyDate } from './studyAnalytics'
 
 export const applicationStatuses = { interested: '관심', planned: '지원 예정', applied: '지원 완료', screening: '서류', coding: '코딩테스트', interview: '면접', accepted: '합격', rejected: '탈락' }

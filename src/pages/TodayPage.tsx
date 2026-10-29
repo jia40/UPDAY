@@ -187,7 +187,7 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
           </li>)}</ul>
         )}
       </section>
-      <p className="today-note">지난 날짜는 조회만 가능합니다. 미완료 항목을 선택해 오늘로 가져오면 원본을 보관하고 새 할 일을 만듭니다. 자동 이월되지 않으며, 오늘로 가져온 항목을 삭제해도 같은 날 다시 이월할 수 없습니다.</p>
+      <p className="today-note">지난 날짜는 조회만 가능하며 미완료 항목을 선택해 오늘로 가져오면 원본을 보관하고 새 할 일을 만듭니다. 자동 이월되지 않으며 오늘로 가져온 항목을 삭제해도 같은 날 다시 이월할 수 없습니다.</p>
       <ConfirmModal open={carryConfirm} title="오늘로 가져오기" message={`선택한 ${selected.length}개 항목을 오늘 할 일로 가져올까요? 지난 기록은 그대로 유지됩니다.`} confirmLabel="가져오기" isPending={pending} error={error}
         onClose={() => { if (!lock.current) { setCarryConfirm(false); setError('') } }}
         onConfirm={() => { if (!carryUnavailable) void run(() => carryTodos(userId, selected), () => { setSelected([]); setCarryConfirm(false); setCarryComplete(true) }) }} />

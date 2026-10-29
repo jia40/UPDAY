@@ -1,5 +1,5 @@
 import { collection, deleteDoc, doc, documentId, getDocsFromServer, limit, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, Timestamp } from 'firebase/firestore'
-import { db } from './firebase'
+import { db } from './firestore'
 
 export type Todo = { id: string; userId: string; title: string; completed: boolean; date: string; createdAt: Timestamp }
 export function localDate(now = new Date()) {

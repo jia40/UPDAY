@@ -1,6 +1,7 @@
 import { FirebaseError } from 'firebase/app'
 import { Timestamp } from 'firebase/firestore'
-import { auth, db } from './firebase'
+import { auth } from './firebase'
+import { db } from './firestore'
 import { needsInterviewReview } from './interviewReview'
 import type { InterviewStatus } from './interviewQuestions'
 

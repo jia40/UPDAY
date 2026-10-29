@@ -74,7 +74,6 @@ function StudySummary({ userId, date }: { userId?: string; date: string }) {
         </>
       )}
       <a className="summary-card__link" href="/study">{ready && !summary.hasRecords ? '학습 기록 시작하기' : '학습 기록 보러가기'} <span aria-hidden="true">→</span></a>
-      {ready && <button type="button" className="summary-card__retry" onClick={() => { setSummary(null); setError(false); setRetry(value => value + 1) }}>통계 새로고침</button>}
     </section>
   )
 }

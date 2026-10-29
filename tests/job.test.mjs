@@ -47,7 +47,7 @@ const input = { company: '기업', position: '개발자', url: '', status: 'inte
 const record = { ...input, id: 'one', userId: 'owner', createdAt: { toMillis: () => 1, toDate: () => new Date() }, updatedAt: { toDate: () => new Date() } }
 function library(records = [], fail = false) {
   const calls = []
-  const api = loader({ './firebase': { db: {} }, 'firebase/firestore': {
+  const api = loader({ './firestore': { db: {} }, 'firebase/firestore': {
     collection: (_db, name) => name, doc: (...args) => args.length === 1 ? { id: 'new' } : args.slice(1).join('/'),
     query: (...args) => args, where: (...args) => args, documentId: () => '__name__', limit: n => ['limit', n],
     serverTimestamp: () => 'server', getDocsFromServer: async q => { calls.push(q); return { docs: records.map(item => ({ id: item.id, data: () => item })) } },

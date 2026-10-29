@@ -33,7 +33,6 @@ function DailySummary({ userId, date }: { userId: string; date: string }) {
     <div className="today-summary"><h2 id="today-study-heading">학습 시간</h2><span>{date}</span></div>
     {error ? <div role="alert"><p className="today-error">학습 시간을 불러오지 못했습니다. 연결 상태를 확인하고 다시 시도해주세요.</p><button type="button" onClick={() => setRetry(value => value + 1)}>학습 시간 다시 불러오기</button></div>
       : minutes === null ? <p role="status">학습 시간을 불러오고 있습니다.</p>
-        : <><p className="today-study-total">{formatStudyTime(minutes)}</p>{minutes === 0 && <p>이 날짜에 기록한 학습이 없습니다.</p>}</>}
-    <div className="today-study-links"><a href={`/study?new=1&date=${date}`}>학습 기록 작성</a><a href={`/study?date=${date}`}>이 날짜의 학습 기록 보기</a></div>
+        : <p className="today-study-total">{formatStudyTime(minutes)}</p>}
   </section>
 }
