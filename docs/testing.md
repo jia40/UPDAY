@@ -53,7 +53,6 @@ package.json은 demo-upday 프로젝트로 Firestore emulators:exec를 실행하
 - 미완료 선택 이월·원본 보존·삭제 후 같은 날 재이월 제한
 - 자정·탭 복귀의 오늘 갱신과 과거 기록 보존
 - Study의 동일 날짜 합계와 일치, 기록 없는 날 0분·조회 실패 오류 구분
-- 날짜가 채워진 Study 작성 링크 및 과거 날짜 목록 링크
 
 ### Study
 

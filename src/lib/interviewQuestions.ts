@@ -1,5 +1,5 @@
 import { collection, deleteDoc, doc, documentId, getDocsFromServer, limit, query, serverTimestamp, setDoc, updateDoc, where, type Timestamp } from 'firebase/firestore'
-import { db } from './firebase'
+import { db } from './firestore'
 
 export type InterviewInput = { question: string; answer: string; tags: string }
 export type InterviewStatus = 'unknown' | 'learning' | 'explainable'

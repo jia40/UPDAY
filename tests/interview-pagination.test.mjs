@@ -26,6 +26,7 @@ function loader(mocks = {}) {
     const exports = {}
     new Function('exports', 'require', output)(exports, (id) => {
       if (id in mocks) return mocks[id]
+      if (id === './firestore' && mocks['./firebase']) return mocks['./firebase']
       if (id.endsWith('.css')) return {}
       if (id.startsWith('.')) return load(new URL(id, url).href)
       return require(id)

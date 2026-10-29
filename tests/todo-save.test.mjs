@@ -9,7 +9,7 @@ function library({ saved = null, writeError = null, readError = null } = {}) {
   const source = readFileSync(new URL('../src/lib/todos.ts', import.meta.url), 'utf8')
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
   const api = {}
-  new Function('exports', 'require', output)(api, id => id === './firebase' ? { db: {} } : id === 'firebase/firestore' ? {
+  new Function('exports', 'require', output)(api, id => id === './firestore' ? { db: {} } : id === 'firebase/firestore' ? {
     collection: (_db, name) => name, doc: (...args) => args.slice(1).join('/'), serverTimestamp: () => 'server',
     query: (...args) => args, where: (...args) => args, documentId: () => '__name__', limit: n => ['limit', n],
     setDoc: async (...args) => { calls.writes.push(args); if (writeError) throw writeError },

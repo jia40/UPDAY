@@ -26,7 +26,7 @@ test('todo rules enforce owner access, atomic carry, permanent receipts and norm
   const source = readFileSync(new URL('../src/lib/todos.ts', import.meta.url), 'utf8')
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
   const api = {}
-  new Function('exports', 'require', output)(api, id => id === './firebase' ? { db } : id === 'firebase/firestore' ? firestore : require(id))
+  new Function('exports', 'require', output)(api, id => id === './firestore' ? { db } : id === 'firebase/firestore' ? firestore : require(id))
   const today = api.localDate()
   const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
   const past = api.localDate(yesterday)

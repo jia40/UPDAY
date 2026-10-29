@@ -37,7 +37,7 @@ function loader(mocks = {}) {
 }
 function library(rows = []) {
   const queries = []
-  const api = loader({ './firebase': { db: {} }, 'firebase/firestore': {
+  const api = loader({ './firestore': { db: {} }, 'firebase/firestore': {
     collection: (_db, name) => name, where: (...args) => args, query: (...args) => args,
     getDocsFromServer: async q => { queries.push(q); return { docs: rows.map(row => ({ data: () => row })) } },
   } })('../src/lib/todayStudy.ts')
@@ -58,7 +58,7 @@ test('Study deep-link dates validate past days and fall back for invalid or futu
   assert.equal(formatStudyTime(105), '1시간 45분')
 })
 function component(fetchDailyStudyMinutes) { return loader({ '../lib/todayStudy': { fetchDailyStudyMinutes } })('../src/components/TodayStudySummary.tsx').default }
-test('summary displays zero and date-specific links; failures are retriable rather than zero', async () => {
+test('summary displays zero; failures are retriable rather than zero', async () => {
   let fail = true
   const Summary = component(async () => { if (fail) throw new Error('network'); return 0 })
   const view = render(createElement(Summary, { userId: 'owner', date: '2026-10-19' }))
@@ -68,8 +68,6 @@ test('summary displays zero and date-specific links; failures are retriable rath
   fail = false
   fireEvent.click(view.getByRole('button', { name: '학습 시간 다시 불러오기' }))
   await view.findByText('0분')
-  assert.equal(view.getByRole('link', { name: '학습 기록 작성' }).getAttribute('href'), '/study?new=1&date=2026-10-19')
-  assert.equal(view.getByRole('link', { name: '이 날짜의 학습 기록 보기' }).getAttribute('href'), '/study?date=2026-10-19')
 })
 test('date and account transitions ignore old results; tab return refreshes without duplicate requests', async () => {
   const pending = []

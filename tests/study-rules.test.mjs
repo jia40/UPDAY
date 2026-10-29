@@ -34,7 +34,7 @@ test('study owner queries, projection, migration and stable paged filters work a
     const output = ts.transpileModule(readFileSync(url, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
     const exports = {}
     new Function('exports', 'require', 'fetch', output)(exports, id => {
-      if (id === './firebase') return { db, auth: { currentUser: { uid: 'study-owner', getIdToken: async () => token } } }
+      if (id === './firebase' || id === './firestore') return { db, auth: { currentUser: { uid: 'study-owner', getIdToken: async () => token } } }
       if (id === 'firebase/firestore') return firestore
       if (id.startsWith('.')) return load(new URL(`${id}.ts`, url).href)
       return require(id)

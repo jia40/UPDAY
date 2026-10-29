@@ -1,6 +1,7 @@
 import { collection, doc, documentId, getDocsFromServer, query, where, orderBy, limit, startAfter, setDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp, type QueryDocumentSnapshot } from 'firebase/firestore'
 import { FirebaseError } from 'firebase/app'
-import { auth, db } from './firebase'
+import { auth } from './firebase'
+import { db } from './firestore'
 import { effectiveStudyDate, validateStudyDate } from './studyAnalytics'
 import { cachedStudyOverview, invalidateStudyOverview } from './studyOverviewCache'
 

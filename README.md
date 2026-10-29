@@ -61,6 +61,7 @@ npm run dev
 | `npm run build` | TypeScript 검사와 프로덕션 빌드, 결과는 `dist/` |
 | `npm run preview` | 빌드된 화면 로컬 확인. 먼저 build 실행 |
 | `npm run lint` | ESLint 검사 |
+| `npm run analyze:bundle -- current --check` | 프로덕션 JS 의존 그래프·파일 크기 분석, 공개 인증 경로의 Firestore 포함 여부 검사 |
 | `npm test` | 일반 자동 테스트. 에뮬레이터 전용 테스트는 기본적으로 건너뜀 |
 | `npm run test:rules` | Java 21 이상과 Firebase CLI/에뮬레이터로 보안 규칙 테스트 |
 
@@ -131,7 +132,8 @@ React·TypeScript·Vite, Firebase Authentication·Cloud Firestore를 사용합�
 ### 남은 작업
 
 - [ ] Today 날짜별 한 줄 기록
-- [ ] 초기 JavaScript 번들 분석·로딩 성능 개선
+- [x] 인증/Firestore 모듈 분리·공개 경로 JS 전송량 개선 및 번들 회귀 검사
+- [ ] 실제 브라우저·배포 환경의 로딩 시간 측정 및 추가 최적화
 - [ ] 실제 브라우저·모바일·키보드·스크린 리더 검증 확대
 - [ ] Skeleton UI·Toast
 - [ ] Google 로그인 연결
@@ -159,4 +161,6 @@ docs-common-readme#83
 [DOCS] README 및 로드맵 현행화 #83
 ```
 
-마지막 문서 확인일: 2026-10-28
+마지막 문서 확인일: 2026-10-29
+
+번들 측정 조건·변경 전후 결과와 실제 브라우저 확인 절차는 [로딩 성능 분석](docs/performance.md)을 참고하세요.
