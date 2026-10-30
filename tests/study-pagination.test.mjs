@@ -116,3 +116,115 @@ test('migration reports concurrent changes and invalid timestamps instead of ove
     : { ok: false, status: 409 } })
   assert.equal(result.updated, 0); assert.equal(result.failed, 2)
 })
+
+test('legacy metadata pages include undated records with owner restriction, stable order and intersected filters', async () => {
+  const { Timestamp } = require('firebase/firestore')
+  const overview = Array.from({ length: 23 }, (_, index) => ({
+    id: String(index).padStart(2, '0'), tags: ['React'], studyMinutes: 30,
+    createdAt: Timestamp.fromDate(new Date('2026-09-30T12:00:00')),
+    ...(index % 2 ? { studyDate: '2026-09-30' } : {}),
+  }))
+  const calls = []
+  const api = loader({ './firestore': { db: {} }, './firebase': { auth: {} }, 'firebase/firestore': {
+    collection: () => 'studyLogs', documentId: () => '__name__', where: (...args) => args, query: (...args) => args,
+    getDocsFromServer: async q => {
+      calls.push(q)
+      return { docs: [...q[2][2]].reverse().map(id => ({ id, data: () => ({ ...record(id), userId: 'owner' }) })) }
+    },
+  } })('../src/lib/studyLogs.ts')
+  const first = await api.fetchLegacyStudyPage('owner', '2026-09-30', 'React', overview)
+  assert.deepEqual(first.items.map(item => item.id), overview.slice(0, 20).map(item => item.id))
+  assert.equal(first.hasMore, true)
+  assert.deepEqual(calls[0][1], ['userId', '==', 'owner'])
+  assert.equal(calls[0][2][2].length, 20)
+  const last = await api.fetchLegacyStudyPage('owner', null, '', overview, first.cursor)
+  assert.deepEqual(last.items.map(item => item.id), ['20', '21', '22'])
+  assert.equal(last.hasMore, false)
+  const count = calls.length
+  assert.equal((await api.fetchLegacyStudyPage('owner', null, 'Other', overview)).items.length, 0)
+  assert.equal((await api.fetchLegacyStudyPage('owner', '2026-09-29', 'React', overview)).items.length, 0)
+  assert.equal(calls.length, count)
+  await assert.rejects(api.fetchLegacyStudyPage('owner', null, '', overview, { legacyId: 'deleted' }))
+})
+
+test('legacy pagination skips deleted metadata pages and propagates failures for retry', async () => {
+  const { Timestamp } = require('firebase/firestore')
+  const overview = Array.from({ length: 21 }, (_, i) => ({ ...record(String(i).padStart(2, '0')), createdAt: Timestamp.fromMillis(1) }))
+  let requests = 0, fail = true
+  const api = loader({ './firestore': { db: {} }, './firebase': { auth: {} }, 'firebase/firestore': {
+    collection: () => 'studyLogs', documentId: () => '__name__', where: (...args) => args, query: (...args) => args,
+    getDocsFromServer: async () => {
+      requests++
+      if (fail) throw new Error('offline')
+      return { docs: requests === 2 ? [] : [{ id: '20', data: () => record('20') }] }
+    },
+  } })('../src/lib/studyLogs.ts')
+  await assert.rejects(api.fetchLegacyStudyPage('owner', null, '', overview), /offline/)
+  fail = false
+  const page = await api.fetchLegacyStudyPage('owner', null, '', overview)
+  assert.deepEqual(page.items.map(item => item.id), ['20'])
+  assert.equal(page.hasMore, false)
+})
+
+test('StudyList routes mixed legacy metadata to compatibility pages and returns to normal pages after backfill', () => {
+  const { Timestamp } = require('firebase/firestore')
+  const calls = []
+  const List = loader({
+    '../hooks/useToday': { useToday: () => '2026-10-29' },
+    './StudyHeatmap': { __esModule: true, default: () => null }, './StudyWeeklyStats': { __esModule: true, default: () => null }, './StudyMonthlyStats': { __esModule: true, default: () => null },
+    './StudyRecordList': { __esModule: true, default: props => { calls.push(props); return createElement('p', null, 'records') } },
+  })('../src/components/StudyList.tsx').default
+  const overview = [{ ...record('old'), studyDate: undefined, createdAt: Timestamp.fromDate(new Date('2026-09-30T00:00:00Z')) }]
+  const props = { userId: 'owner', overview, revision: 0, loading: false, error: '', reload: () => {} }
+  const view = render(createElement(List, props))
+  assert.equal(view.queryByRole('alert'), null)
+  assert.equal(calls.at(-1).legacyOverview, overview)
+  view.rerender(createElement(List, { ...props, overview: overview.map(item => ({ ...item, studyDate: '2026-09-30' })), revision: 1 }))
+  assert.equal(calls.at(-1).legacyOverview, undefined)
+})
+
+test('backfill reports malformed dates and embedded query errors without false success', async () => {
+  const options = { project: 'demo-upday', token: 'test', report: () => {} }
+  const result = await backfill({ ...options, request: async () => ({ ok: true, json: async () => [
+    { document: { name: 'projects/demo-upday/databases/(default)/documents/studyLogs/bad', fields: { studyDate: { stringValue: '2025-02-29' } } } },
+  ] }) })
+  assert.equal(result.failed, 1)
+  assert.equal(result.skipped, 0)
+  await assert.rejects(backfill({ ...options, request: async () => ({ ok: true, json: async () => [{ error: { code: 403 } }] }) }), /응답에 오류/)
+})
+
+test('backfill rerun preserves completed dates and continues after a partial commit failure', async () => {
+  const documents = ['one', 'two'].map(id => ({ name: `projects/demo-upday/databases/(default)/documents/studyLogs/${id}`,
+    updateTime: '2026-10-01T00:00:00Z', fields: { createdAt: { timestampValue: '2026-09-30T16:00:00Z' } } }))
+  let fail = true, writes = 0
+  const options = { project: 'demo-upday', token: 'test', apply: true, report: () => {}, request: async (url, options) => {
+    if (url.endsWith(':runQuery')) return { ok: true, json: async () => documents.map(document => ({ document })) }
+    const write = JSON.parse(options.body).writes[0]
+    writes++
+    if (fail && write.update.name.endsWith('/one')) return { ok: false, status: 409 }
+    documents.find(item => item.name === write.update.name).fields.studyDate = write.update.fields.studyDate
+    return { ok: true }
+  } }
+  const first = await backfill(options)
+  assert.equal(first.updated, 1); assert.equal(first.failed, 1)
+  fail = false
+  const second = await backfill(options)
+  assert.equal(second.updated, 1); assert.equal(second.skipped, 1)
+  const third = await backfill(options)
+  assert.equal(third.candidates, 0); assert.equal(third.failed, 0); assert.equal(writes, 3)
+})
+
+test('backfill scans beyond 200 documents with a stable ID cursor and rejects future creation dates', async () => {
+  const documents = Array.from({ length: 201 }, (_, index) => ({
+    name: `projects/demo-upday/databases/(default)/documents/studyLogs/${String(index).padStart(3, '0')}`,
+    fields: { createdAt: { timestampValue: index === 200 ? '9999-01-01T00:00:00Z' : '2026-01-01T00:00:00Z' } },
+  }))
+  const calls = []
+  const result = await backfill({ project: 'demo-upday', token: 'test', report: () => {}, request: async (_url, options) => {
+    const query = JSON.parse(options.body).structuredQuery
+    calls.push(query)
+    return { ok: true, json: async () => (query.startAt ? documents.slice(200) : documents.slice(0, 200)).map(document => ({ document })) }
+  } })
+  assert.equal(result.scanned, 201); assert.equal(result.candidates, 200); assert.equal(result.failed, 1); assert.equal(result.updated, 0)
+  assert.deepEqual(calls[1].startAt, { values: [{ referenceValue: documents[199].name }], before: false })
+})

@@ -48,9 +48,8 @@ export default function StudyList({ userId, overview, revision, loading, error, 
         <p role="status">{filterDate || filterTag ? [filterDate, filterTag, '학습 기록 ' + visibleLogs.length + '개'].filter(Boolean).join(' · ') : '전체 학습 기록 ' + overview.length + '개'}</p>
         {(filterDate || filterTag) && <button type="button" onClick={() => { setSelectedDate(null); setSelectedTag('') }}>필터 해제</button>}
       </div>
-      {needsDateMigration
-        ? <p role="alert">이전 학습 기록을 불러올 수 없습니다. 관리자에게 문의해주세요.</p>
-        : <StudyRecordList key={JSON.stringify([userId, filterDate, filterTag, revision])} userId={userId} date={filterDate} tag={filterTag} />}
+      <StudyRecordList key={JSON.stringify([userId, filterDate, filterTag, revision, needsDateMigration])}
+        userId={userId} date={filterDate} tag={filterTag} legacyOverview={needsDateMigration ? overview : undefined} />
     </section>
 
   </>

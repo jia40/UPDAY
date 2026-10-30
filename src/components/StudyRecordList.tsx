@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchStudyPage, type StudyLog, type StudyPageCursor } from '../lib/studyLogs'
+import { fetchStudyPage, fetchLegacyStudyPage, type StudyLog, type StudyPageCursor, type StudySummary } from '../lib/studyLogs'
 import { effectiveStudyDate, formatStudyTime } from '../lib/studyAnalytics'
 
-export default function StudyRecordList({ userId, date, tag }: { userId: string; date: string | null; tag: string }) {
+export default function StudyRecordList({ userId, date, tag, legacyOverview }: { userId: string; date: string | null; tag: string; legacyOverview?: StudySummary[] }) {
   const [items, setItems] = useState<StudyLog[]>([])
   const [cursor, setCursor] = useState<StudyPageCursor>()
   const [hasMore, setHasMore] = useState(true)
@@ -14,20 +14,21 @@ export default function StudyRecordList({ userId, date, tag }: { userId: string;
   useEffect(() => {
     active.current = true
     let cancelled = false
-    fetchStudyPage(userId, date, tag).then(page => {
+    const request = legacyOverview ? fetchLegacyStudyPage(userId, date, tag, legacyOverview) : fetchStudyPage(userId, date, tag)
+    request.then(page => {
       if (!cancelled) { setItems(page.items); setCursor(page.cursor); setHasMore(page.hasMore); setError('') }
     }).catch(() => {
       if (!cancelled) setError('학습 기록을 불러오지 못했습니다. 다시 시도해주세요.')
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true; active.current = false }
-  }, [userId, date, tag, retry])
+  }, [userId, date, tag, retry, legacyOverview])
 
   async function loadMore() {
     if (busy.current || loading || !hasMore) return
     busy.current = true
     setLoading(true); setError('')
     try {
-      const page = await fetchStudyPage(userId, date, tag, cursor)
+      const page = await (legacyOverview ? fetchLegacyStudyPage(userId, date, tag, legacyOverview, cursor) : fetchStudyPage(userId, date, tag, cursor))
       if (active.current) {
         setItems(previous => [...previous, ...page.items.filter(item => !previous.some(existing => existing.id === item.id))])
         setCursor(page.cursor); setHasMore(page.hasMore)

@@ -98,6 +98,8 @@ npm run dev
 
 일자 표시는 사용자 로컬 날짜를 기준으로 합니다. 이전 Study 날짜 없는 기록의 호환성과 보완 절차는 [운영 문서](docs/operations.md)에 있습니다.
 
+Study 목록은 날짜 없는 기존 기록도 생성일의 로컬 날짜를 기준으로 표시합니다. Today 학습 시간에 포함하려면 해당 기록의 실제 학습 날짜를 저장하거나 운영 문서의 날짜 보완 절차를 진행해야 합니다.
+
 ## 구조와 조회 비용
 
 React·TypeScript·Vite, Firebase Authentication·Cloud Firestore를 사용합니다. Vercel용 SPA rewrite는 `vercel.json`에 있습니다.
