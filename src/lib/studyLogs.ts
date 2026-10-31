@@ -2,13 +2,13 @@ import { collection, doc, documentId, getDocsFromServer, query, where, orderBy, 
 import { FirebaseError } from 'firebase/app'
 import { auth } from './firebase'
 import { db } from './firestore'
-import { effectiveStudyDate, validateStudyDate } from './studyAnalytics'
+import { effectiveStudyDate, filterStudyLogs, validateStudyDate } from './studyAnalytics'
 import { cachedStudyOverview, invalidateStudyOverview } from './studyOverviewCache'
 
 export type StudyInput = { title: string; content: string; tags: string; studyMinutes: string; studyDate: string }
 export type StudyLog = { id: string; userId: string; title: string; content: string; tags: string[]; studyMinutes: number; studyDate?: string; createdAt: Timestamp }
 export type StudySummary = Pick<StudyLog, 'id' | 'studyDate' | 'createdAt' | 'studyMinutes' | 'tags'>
-export type StudyPageCursor = QueryDocumentSnapshot
+export type StudyPageCursor = QueryDocumentSnapshot | { legacyId: string }
 export const STUDY_PAGE_SIZE = 20
 
 export async function fetchStudyLog(userId: string, id: string): Promise<StudyLog | null> {
@@ -26,6 +26,7 @@ export async function fetchStudyLog(userId: string, id: string): Promise<StudyLo
 }
 
 export async function fetchStudyPage(userId: string, date: string | null, tag: string, cursor?: StudyPageCursor) {
+  if (cursor && 'legacyId' in cursor) throw new Error('목록을 새로고침해주세요.')
   const constraints = [where('userId', '==', userId)]
   if (date) constraints.push(where('studyDate', '==', date))
   if (tag) constraints.push(where('tags', 'array-contains', tag))
@@ -37,6 +38,29 @@ export async function fetchStudyPage(userId: string, date: string | null, tag: s
     items: docs.map(item => ({ ...item.data(), id: item.id }) as StudyLog),
     cursor: docs.at(-1), hasMore: snapshot.docs.length > STUDY_PAGE_SIZE,
   }
+}
+
+// An orderBy(studyDate) query omits documents without that field. Until backfill,
+// paginate the existing owner metadata instead, fetching only one page of bodies.
+export async function fetchLegacyStudyPage(userId: string, date: string | null, tag: string, overview: StudySummary[], cursor?: StudyPageCursor) {
+  if (cursor && !('legacyId' in cursor)) throw new Error('목록을 새로고침해주세요.')
+  const eligible = filterStudyLogs(overview, date, tag).sort((a, b) =>
+    (effectiveStudyDate(b) ?? '').localeCompare(effectiveStudyDate(a) ?? '')
+    || b.createdAt.seconds - a.createdAt.seconds || b.createdAt.nanoseconds - a.createdAt.nanoseconds
+    || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  let start = cursor ? eligible.findIndex(item => item.id === cursor.legacyId) + 1 : 0
+  if (cursor && start === 0) throw new Error('목록이 변경되었습니다. 새로고침해주세요.')
+  while (start < eligible.length) {
+    const page = eligible.slice(start, start + STUDY_PAGE_SIZE)
+    const snapshot = await getDocsFromServer(query(collection(db, 'studyLogs'), where('userId', '==', userId),
+      where(documentId(), 'in', page.map(item => item.id))))
+    const records = new Map(snapshot.docs.map(item => [item.id, { ...item.data(), id: item.id } as StudyLog]))
+    const items = page.flatMap(item => records.has(item.id) ? [records.get(item.id)!] : [])
+    start += page.length
+    // A cached metadata page can consist entirely of records deleted elsewhere.
+    if (items.length) return { items, cursor: { legacyId: page.at(-1)!.id }, hasMore: start < eligible.length }
+  }
+  return { items: [], cursor: undefined, hasMore: false }
 }
 
 // The Web SDK has no field projection. REST uses the same Firebase ID token and

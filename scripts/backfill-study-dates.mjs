@@ -4,13 +4,21 @@ export function dateInZone(timestamp, timeZone = 'Asia/Seoul') {
   const date = new Date(timestamp)
   if (!Number.isFinite(date.getTime())) throw new Error('유효한 createdAt이 없습니다.')
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date).map(part => [part.type, part.value]))
-  return `${parts.year.padStart(4, '0')}-${parts.month}-${parts.day}`
+  const key = `${parts.year.padStart(4, '0')}-${parts.month}-${parts.day}`
+  if (!validDate(key)) throw new Error('지원하는 날짜 범위를 벗어난 createdAt입니다.')
+  return key
+}
+
+function validDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value < '0001-01-01') return false
+  const parsed = new Date(value + 'T12:00:00Z')
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
 }
 
 // Dry run by default. A precondition prevents overwriting concurrently edited records.
 export async function backfill({ project, token, apply = false, timeZone = 'Asia/Seoul', request = fetch, report = console.log }) {
   if (!/^[a-z][a-z0-9-]+$/.test(project ?? '') || !token) throw new Error('프로젝트 ID와 GOOGLE_OAUTH_ACCESS_TOKEN이 필요합니다.')
-  dateInZone(new Date().toISOString(), timeZone)
+  const today = dateInZone(new Date().toISOString(), timeZone)
   const base = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
   const result = { scanned: 0, candidates: 0, updated: 0, skipped: 0, failed: 0 }
@@ -22,13 +30,19 @@ export async function backfill({ project, token, apply = false, timeZone = 'Asia
       ...(cursor ? { startAt: { values: [{ referenceValue: cursor }], before: false } } : {}),
     } }) })
     if (!response.ok) throw new Error(`학습 기록 조회 실패 (HTTP ${response.status}). 접근 권한과 토큰 만료를 확인해주세요.`)
-    const documents = (await response.json()).flatMap(row => row.document ? [row.document] : [])
+    const rows = await response.json()
+    if (!Array.isArray(rows) || rows.some(row => row.error)) throw new Error('학습 기록 조회 응답에 오류가 있습니다. 적용 결과를 확인한 뒤 재실행해주세요.')
+    const documents = rows.flatMap(row => row.document ? [row.document] : [])
     if (!documents.length) break
     for (const document of documents) {
       result.scanned++
-      if (document.fields && 'studyDate' in document.fields) { result.skipped++; continue }
       try {
+        if (document.fields && 'studyDate' in document.fields) {
+          if (!validDate(document.fields.studyDate?.stringValue)) throw new Error('기존 studyDate가 올바르지 않습니다. 실제 학습 날짜를 확인해 수동 보완해주세요.')
+          result.skipped++; continue
+        }
         const studyDate = dateInZone(document.fields?.createdAt?.timestampValue, timeZone)
+        if (studyDate > today) throw new Error('생성 시각이 미래입니다. 실제 학습 날짜를 확인해 수동 보완해주세요.')
         result.candidates++
         report(`${apply ? 'APPLY' : 'DRY RUN'} ${document.name.split('/').at(-1)} -> ${studyDate}`)
         if (apply) {
