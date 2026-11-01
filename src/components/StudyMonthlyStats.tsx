@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { StudySummary } from '../lib/studyLogs'
 import { formatStudyTime, monthlyStudySummary, shiftStudyMonth } from '../lib/studyAnalytics'
 
-export default function StudyMonthlyStats({ logs, today }: { logs: StudySummary[]; today: string }) {
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null)
+export default function StudyMonthlyStats({ logs, today, selectedMonth, onMonthChange }: {
+  logs: StudySummary[]; today: string; selectedMonth: string | null; onMonthChange: (month: string | null) => void
+}) {
   const currentMonth = today.slice(0, 7)
   const month = selectedMonth && selectedMonth < currentMonth ? selectedMonth : currentMonth
   const summary = useMemo(() => monthlyStudySummary(logs, month, today), [logs, month, today])
@@ -11,11 +12,11 @@ export default function StudyMonthlyStats({ logs, today }: { logs: StudySummary[
     <div className="study-heading-row">
       <h2 id="study-monthly-heading">월간 학습 통계</h2>
       <div className="study-weekly-nav" role="group" aria-label="통계 월 선택">
-        <button type="button" disabled={month === '0001-01'} onClick={() => setSelectedMonth(shiftStudyMonth(month, -1))}>이전 달</button>
-        <button type="button" disabled={month === currentMonth} onClick={() => setSelectedMonth(null)}>이번 달</button>
+        <button type="button" disabled={month === '0001-01'} onClick={() => onMonthChange(shiftStudyMonth(month, -1))}>이전 달</button>
+        <button type="button" disabled={month === currentMonth} onClick={() => onMonthChange(null)}>이번 달</button>
         <button type="button" disabled={month === currentMonth} onClick={() => {
           const next = shiftStudyMonth(month, 1)
-          setSelectedMonth(next === currentMonth ? null : next)
+          onMonthChange(next === currentMonth ? null : next)
         }}>다음 달</button>
       </div>
     </div>

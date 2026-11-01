@@ -7,6 +7,7 @@ export function useStudyLogs(userId: string, selected: string | null, formView: 
   const [record, setRecord] = useState<StudyLog | null>(null)
   const [overview, setOverview] = useState<StudySummary[]>([])
   const [loading, setLoading] = useState(!formView || Boolean(selected))
+  const [hasLoaded, setHasLoaded] = useState(false)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
   const forceNext = useRef(false)
@@ -19,7 +20,7 @@ export function useStudyLogs(userId: string, selected: string | null, formView: 
     const request = selected ? fetchStudyLog(userId, selected).then(record => ({ record, summary: [] as StudySummary[] }))
       : fetchStudyOverview(userId, { force }).then(summary => ({ record: null, summary }))
     request.then(result => {
-      if (!cancelled) { setRecord(result.record); setOverview(result.summary); setError(''); setLoading(false) }
+      if (!cancelled) { setRecord(result.record); setOverview(result.summary); setError(''); setHasLoaded(true); setLoading(false) }
     }).catch(reason => { if (!cancelled) { setError(errorText(reason)); setLoading(false) } })
     return () => { cancelled = true }
   }, [userId, selected, formView, revision])
@@ -33,5 +34,5 @@ export function useStudyLogs(userId: string, selected: string | null, formView: 
     document.addEventListener('visibilitychange', visible)
     return () => { window.removeEventListener('pageshow', restore); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', visible) }
   }, [formView, selected, reload])
-  return { record, overview, loading, error, reload, revision }
+  return { record, overview, loading, hasLoaded, error, reload, revision }
 }

@@ -6,7 +6,7 @@ import StudyDetail from '../components/StudyDetail'
 import '../styles/study.css'
 
 function StudyScreen({ userId, selected, formView }: { userId: string; selected: string | null; formView: boolean }) {
-  const { record, overview, loading, error, reload, revision } = useStudyLogs(userId, selected, formView)
+  const { record, overview, loading, hasLoaded, error, reload, revision } = useStudyLogs(userId, selected, formView)
   return <section className="study-page" aria-labelledby="study-heading">
     <header><p className="study-eyebrow">STUDY</p><div className="study-heading-row">
       <h1 id="study-heading">내 학습 기록</h1>
@@ -14,7 +14,7 @@ function StudyScreen({ userId, selected, formView }: { userId: string; selected:
     </div></header>
     {selected && !formView && <a className="study-back" href="/study">← 목록으로</a>}
       <div className="study-grid">
-      {!formView && !selected ? <StudyList userId={userId} overview={overview} revision={revision} loading={loading} error={error} reload={reload} />
+      {!formView && !selected ? <StudyList userId={userId} overview={overview} revision={revision} loading={loading} hasLoaded={hasLoaded} error={error} reload={reload} />
         : loading ? <p role="status">학습 기록을 불러오고 있습니다.</p> : error ? <div className="study-panel" role="alert"><p>{error}</p><button type="button" onClick={() => reload()}>다시 불러오기</button></div>
         : selected && !record ? <section className="study-panel"><p>학습 기록을 찾을 수 없거나 접근 권한이 없습니다.</p><a href="/study">목록으로</a></section>
         : formView ? <StudyForm key={record?.id ?? 'new'} userId={userId} record={record ?? undefined} />

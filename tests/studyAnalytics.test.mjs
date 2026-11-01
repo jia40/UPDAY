@@ -183,17 +183,23 @@ test('invalid study input is rejected before saving or reconciling', async () =>
   assert.equal(calls, 0)
 })
 
-function mount({ logs = [], url = '/study', fail = false } = {}) {
+function mount({ logs = [], url = '/study', fail = false, deferOverview = false } = {}) {
   window.history.replaceState({}, '', url)
   let today = '2026-09-23'
   const saved = []
   let overviewRequests = 0
+  let userId = 'owner'
+  const pendingOverview = []
   const { api } = apiHarness()
   const Page = loader({
-    '../hooks/useAuth': { useAuth: () => ({ user: { uid: 'owner' } }) },
+    '../hooks/useAuth': { useAuth: () => ({ user: userId ? { uid: userId } : null }) },
     '../hooks/useToday': { useToday: () => today },
     '../lib/studyLogs': {
-      fetchStudyOverview: async () => { overviewRequests++; if (fail) throw new Error('조회 실패'); return logs },
+      fetchStudyOverview: async (uid, options) => {
+        overviewRequests++
+        if (deferOverview) return new Promise((resolve, reject) => pendingOverview.push({ uid, options, resolve, reject }))
+        if (fail) throw new Error('조회 실패'); return logs
+      },
       fetchStudyLog: async (_user, id) => { if (fail) throw new Error('조회 실패'); return logs.find(log => log.id === id) ?? null },
       fetchStudyPage: async (_user, date, tag) => {
         const matching = filterStudyLogs(logs, date, tag)
@@ -207,8 +213,116 @@ function mount({ logs = [], url = '/study', fail = false } = {}) {
     './common/CompleteModal': { __esModule: true, default: () => null },
   })('../src/pages/StudyPage.tsx').default
   const view = render(createElement(Page))
-  return { ...view, saved, overviewRequests: () => overviewRequests, setToday: (value) => { today = value; view.rerender(createElement(Page)) } }
+  return { ...view, saved, pendingOverview, overviewRequests: () => overviewRequests,
+    setToday: (value) => { today = value; view.rerender(createElement(Page)) },
+    setUser: (value) => { userId = value; view.rerender(createElement(Page)) },
+  }
 }
+
+test('manual refresh preserves selected week and month while updating their totals', async () => {
+  const view = mount({ deferOverview: true })
+  await act(async () => view.pendingOverview[0].resolve([]))
+  fireEvent.click(view.getByRole('button', { name: '이전 주' }))
+  fireEvent.click(view.getByRole('button', { name: '이전 달' }))
+  fireEvent.click(view.getByRole('button', { name: '학습 기록 새로고침' }))
+  assert.ok(view.getByText('학습 기록을 새로 불러오고 있습니다.'))
+  assert.equal(view.queryByRole('region', { name: '주간 학습 통계' }), null)
+  await act(async () => view.pendingOverview[1].resolve([record('week', '2026-09-14', 60), record('month', '2026-08-20', 90)]))
+  const week = within(view.getByRole('region', { name: '주간 학습 통계' }))
+  const month = within(view.getByRole('region', { name: '월간 학습 통계' }))
+  assert.match(week.getByRole('status').textContent, /2026-09-14 ~ 2026-09-20/)
+  assert.match(month.getByRole('status').textContent, /2026-08-01 ~ 2026-08-31/)
+  assert.ok(week.getByText('1시간', { selector: 'dd' }))
+  assert.ok(month.getByText('1시간 30분'))
+  assert.equal(view.pendingOverview[1].options.force, true)
+})
+
+for (const eventType of ['focus', 'visibilitychange', 'pageshow']) {
+  test(`${eventType} refresh retains selected periods and respects cached refresh policy`, async () => {
+    const view = mount({ deferOverview: true })
+    await act(async () => view.pendingOverview[0].resolve([]))
+    fireEvent.click(view.getByRole('button', { name: '이전 주' }))
+    fireEvent.click(view.getByRole('button', { name: '이전 달' }))
+    const visibility = Object.getOwnPropertyDescriptor(document, 'visibilityState')
+    try {
+      act(() => {
+        if (eventType === 'visibilitychange') {
+          Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+          document.dispatchEvent(new window.Event(eventType))
+        } else if (eventType === 'pageshow') window.dispatchEvent(new window.PageTransitionEvent(eventType, { persisted: true }))
+        else window.dispatchEvent(new window.Event(eventType))
+      })
+      assert.ok(view.getByText('학습 기록을 새로 불러오고 있습니다.'))
+      assert.equal(view.pendingOverview[1].options.force, false)
+      await act(async () => view.pendingOverview[1].resolve([]))
+      const week = within(view.getByRole('region', { name: '주간 학습 통계' }))
+      const month = within(view.getByRole('region', { name: '월간 학습 통계' }))
+      assert.match(week.getByRole('status').textContent, /2026-09-14 ~ 2026-09-20/)
+      assert.match(month.getByRole('status').textContent, /2026-08-01 ~ 2026-08-31/)
+    } finally {
+      if (visibility) Object.defineProperty(document, 'visibilityState', visibility)
+      else delete document.visibilityState
+    }
+  })
+}
+
+test('refresh failure and retry preserve periods without showing stale totals as current data', async () => {
+  const view = mount({ deferOverview: true })
+  await act(async () => view.pendingOverview[0].resolve([record('old', '2026-08-20', 30)]))
+  fireEvent.click(view.getByRole('button', { name: '이전 주' }))
+  fireEvent.click(view.getByRole('button', { name: '이전 달' }))
+  fireEvent.click(view.getByRole('button', { name: '학습 기록 새로고침' }))
+  await act(async () => view.pendingOverview[1].reject(new Error('조회 실패')))
+  assert.ok(view.getByRole('alert'))
+  assert.equal(view.queryByRole('region', { name: '월간 학습 통계' }), null)
+  assert.equal(view.queryByText('30분'), null)
+  fireEvent.click(view.getByRole('button', { name: '다시 불러오기' }))
+  assert.ok(view.getByText('학습 기록을 새로 불러오고 있습니다.'))
+  await act(async () => view.pendingOverview[2].resolve([record('updated', '2026-08-20', 45)]))
+  assert.match(within(view.getByRole('region', { name: '주간 학습 통계' })).getByRole('status').textContent, /2026-09-14/)
+  const month = within(view.getByRole('region', { name: '월간 학습 통계' }))
+  assert.match(month.getByRole('status').textContent, /2026-08-01/)
+  assert.ok(month.getByText('45분'))
+})
+
+test('account change resets periods and ignores the previous account pending response', async () => {
+  const view = mount({ deferOverview: true })
+  assert.ok(view.getByText('학습 기록을 불러오고 있습니다.'))
+  await act(async () => view.pendingOverview[0].resolve([]))
+  fireEvent.click(view.getByRole('button', { name: '이전 주' }))
+  fireEvent.click(view.getByRole('button', { name: '이전 달' }))
+  fireEvent.click(view.getByRole('button', { name: '학습 기록 새로고침' }))
+  view.setUser('other')
+  assert.equal(view.pendingOverview[2].uid, 'other')
+  assert.ok(view.getByText('학습 기록을 불러오고 있습니다.'))
+  await act(async () => view.pendingOverview[1].resolve([record('previous-account', '2026-08-20', 999)]))
+  assert.equal(view.queryByRole('region', { name: '월간 학습 통계' }), null)
+  await act(async () => view.pendingOverview[2].resolve([]))
+  assert.match(within(view.getByRole('region', { name: '주간 학습 통계' })).getByRole('status').textContent, /2026-09-21 ~ 2026-09-27/)
+  assert.match(within(view.getByRole('region', { name: '월간 학습 통계' })).getByRole('status').textContent, /2026-09-01 ~ 2026-09-23/)
+  view.setUser(null)
+  assert.equal(view.queryByRole('region', { name: '주간 학습 통계' }), null)
+  view.setUser('owner')
+  await act(async () => view.pendingOverview[3].resolve([]))
+  assert.equal(view.getByRole('button', { name: '이번 달' }).disabled, true)
+})
+
+test('retained periods respect date changes, current shortcuts and future navigation limits', async () => {
+  const view = mount()
+  await view.findByRole('region', { name: '주간 학습 통계' })
+  fireEvent.click(view.getByRole('button', { name: '이전 주' }))
+  fireEvent.click(view.getByRole('button', { name: '이전 달' }))
+  view.setToday('2026-10-01')
+  assert.match(within(view.getByRole('region', { name: '주간 학습 통계' })).getByRole('status').textContent, /2026-09-14/)
+  assert.match(within(view.getByRole('region', { name: '월간 학습 통계' })).getByRole('status').textContent, /2026-08-01/)
+  fireEvent.click(view.getByRole('button', { name: '이번 주' }))
+  fireEvent.click(view.getByRole('button', { name: '이번 달' }))
+  view.setToday('2026-11-01')
+  assert.match(within(view.getByRole('region', { name: '주간 학습 통계' })).getByRole('status').textContent, /2026-10-26 ~ 2026-11-01/)
+  assert.match(within(view.getByRole('region', { name: '월간 학습 통계' })).getByRole('status').textContent, /2026-11-01 ~ 2026-11-01/)
+  assert.equal(view.getByRole('button', { name: '다음 주' }).disabled, true)
+  assert.equal(view.getByRole('button', { name: '다음 달' }).disabled, true)
+})
 
 test('tag and date filters compose without changing weekly totals; navigation crosses weeks', async () => {
   const view = mount({ logs: [record('React 공부', '2026-09-21', 30, ['React']), record('CS 공부', '2026-09-22', 60, ['CS']), record('지난 공부', '2026-09-14', 10, ['React'])] })
