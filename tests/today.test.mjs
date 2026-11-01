@@ -16,7 +16,7 @@ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 dom.window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
 dom.window.HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
-const { render, fireEvent, waitFor, cleanup, act } = await import('@testing-library/react')
+const { render, fireEvent, waitFor, cleanup, act, within } = await import('@testing-library/react')
 const { createElement } = await import('react')
 afterEach(cleanup)
 
@@ -42,13 +42,15 @@ function loader(mocks) {
 }
 const item = { id: 'source', userId: 'owner', title: '지난 할 일', completed: false, date: '2026-09-29' }
 function mount(options = {}) {
+  let today = '2026-09-30'
+  let userId = 'owner'
   const calls = { carry: [], create: [], rename: [], complete: [], remove: [] }
   const api = {
     fetchTodos: async (_uid, date) => options.todos ? options.todos(date) : [{ ...item, date }],
-    fetchCarriedTodoIds: async () => options.receipts ? options.receipts() : new Set(),
+    fetchCarriedTodoIds: async (uid, date) => options.receipts ? options.receipts(uid, date) : new Set(),
     carryTodos: async (...args) => { calls.carry.push(args) },
     createTodo: async (...args) => { calls.create.push(args); await options.create?.(...args) },
-    renameTodo: async (...args) => { calls.rename.push(args) },
+    renameTodo: async (...args) => { calls.rename.push(args); await options.rename?.(...args) },
     completeTodo: async (...args) => { calls.complete.push(args) },
     removeTodo: async (...args) => { calls.remove.push(args) },
     newTodoId: () => 'new', validTitle: value => value.trim(),
@@ -56,13 +58,198 @@ function mount(options = {}) {
   const page = loader({
     '../lib/todos': api,
     '../components/TodayStudySummary': { __esModule: true, default: () => null },
-    '../hooks/useAuth': { useAuth: () => ({ user: { uid: 'owner' }, isLoading: false }) },
-    '../hooks/useToday': { useToday: () => '2026-09-30' },
+    '../hooks/useAuth': { useAuth: () => ({ user: userId ? { uid: userId } : null, isLoading: false }) },
+    '../hooks/useToday': { useToday: () => today },
   })('../src/pages/TodayPage.tsx')
   const view = render(createElement(page.default))
   const past = () => fireEvent.change(view.getByLabelText('할 일 조회 날짜'), { target: { value: '2026-09-29' } })
-  return { ...view, options, calls, past }
+  return { ...view, options, calls, past,
+    setToday: value => { today = value; view.rerender(createElement(page.default)) },
+    setUser: value => { userId = value; view.rerender(createElement(page.default)) },
+  }
 }
+
+test('dirty new input confirms date changes, cancel preserves input, approval clears it without saving', async () => {
+  const view = mount()
+  await waitFor(() => assert.equal(view.getByLabelText('새 할 일').disabled, false))
+  fireEvent.change(view.getByLabelText('새 할 일'), { target: { value: '작성 중인 할 일' } })
+  fireEvent.change(view.getByLabelText('할 일 조회 날짜'), { target: { value: '2026-09-30' } })
+  assert.equal(view.queryByRole('dialog'), null)
+  view.past()
+  assert.ok(view.getByRole('dialog', { name: '날짜 변경' }))
+  assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-09-30')
+  fireEvent.click(view.getByRole('button', { name: '취소', exact: true }))
+  assert.equal(view.getByLabelText('새 할 일').value, '작성 중인 할 일')
+  view.past()
+  fireEvent.click(view.getByRole('button', { name: '이동하기' }))
+  await view.findByLabelText('지난 할 일 이월 선택')
+  assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-09-29')
+  fireEvent.click(view.getByRole('button', { name: '오늘로', exact: true }))
+  await view.findByLabelText('새 할 일')
+  assert.equal(view.getByLabelText('새 할 일').value, '')
+  assert.deepEqual(view.calls.create, [])
+})
+
+test('editing compares with the original title and cancel or reverting removes date protection', async () => {
+  const view = mount()
+  await view.findByLabelText('지난 할 일 더보기')
+  fireEvent.click(view.getByLabelText('지난 할 일 더보기'))
+  fireEvent.click(view.getByRole('button', { name: '수정하기' }))
+  fireEvent.change(view.getByLabelText('할 일 수정'), { target: { value: '수정 중' } })
+  view.past()
+  fireEvent.click(within(view.getByRole('dialog')).getByRole('button', { name: '취소', exact: true }))
+  assert.equal(view.getByLabelText('할 일 수정').value, '수정 중')
+  fireEvent.change(view.getByLabelText('할 일 수정'), { target: { value: item.title } })
+  await act(async () => view.past())
+  assert.equal(view.queryByRole('dialog'), null)
+  fireEvent.click(view.getByRole('button', { name: '오늘로', exact: true }))
+  await view.findByLabelText('지난 할 일 더보기')
+  fireEvent.click(view.getByLabelText('지난 할 일 더보기'))
+  fireEvent.click(view.getByRole('button', { name: '수정하기' }))
+  fireEvent.change(view.getByLabelText('할 일 수정'), { target: { value: '버릴 수정' } })
+  fireEvent.click(view.getByRole('button', { name: '취소', exact: true }))
+  await act(async () => view.past())
+  assert.equal(view.queryByRole('dialog'), null)
+})
+
+for (const editing of [false, true]) {
+  test(`midnight preserves ${editing ? 'edited' : 'new'} input and today navigation asks before discarding`, async () => {
+    const view = mount()
+    await view.findByLabelText('지난 할 일 더보기')
+    if (editing) {
+      fireEvent.click(view.getByLabelText('지난 할 일 더보기'))
+      fireEvent.click(view.getByRole('button', { name: '수정하기' }))
+    }
+    const label = editing ? '할 일 수정' : '새 할 일'
+    fireEvent.change(view.getByLabelText(label), { target: { value: '자정 전 작성' } })
+    view.setToday('2026-10-01')
+    assert.ok(view.getByRole('dialog', { name: '날짜 변경' }))
+    assert.equal(view.getByLabelText(label).value, '자정 전 작성')
+    // Only the dialog's cancel button is accessible in a real modal browser.
+    fireEvent.click(view.getAllByRole('button', { name: '취소', exact: true }).at(-1))
+    assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-09-30')
+    assert.equal(view.getByLabelText(label).value, '자정 전 작성')
+    assert.equal(view.getByRole('button', { name: editing ? '저장' : '추가', exact: true }).disabled, true)
+    view.setToday('2026-10-01')
+    assert.equal(view.queryByRole('dialog'), null)
+    fireEvent.click(view.getByRole('button', { name: '오늘로', exact: true }))
+    assert.ok(view.getByRole('dialog', { name: '날짜 변경' }))
+    fireEvent.click(view.getByRole('button', { name: '이동하기' }))
+    await view.findByLabelText('새 할 일')
+    assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-10-01')
+    assert.equal(view.getByLabelText('새 할 일').value, '')
+    assert.deepEqual(view.calls.create, [])
+    assert.deepEqual(view.calls.rename, [])
+  })
+}
+
+for (const fail of [false, true]) {
+  test(`midnight waits for a pending save, then ${fail ? 'protects failed input' : 'moves without asking after success'}`, async () => {
+    let finish, reject
+    const view = mount({ create: () => new Promise((resolve, fail) => { finish = resolve; reject = fail }) })
+    await waitFor(() => assert.equal(view.getByLabelText('새 할 일').disabled, false))
+    fireEvent.change(view.getByLabelText('새 할 일'), { target: { value: '저장 중인 할 일' } })
+    fireEvent.click(view.getByRole('button', { name: '추가' }))
+    view.setToday('2026-10-01')
+    assert.equal(view.getByLabelText('할 일 조회 날짜').disabled, true)
+    assert.equal(view.queryByRole('dialog'), null)
+    assert.deepEqual(view.calls.create[0], ['new', 'owner', '2026-09-30', '저장 중인 할 일'])
+    await act(async () => { if (fail) reject(new Error('저장 실패')); else finish() })
+    if (fail) {
+      assert.ok(view.getByRole('dialog', { name: '날짜 변경' }))
+      fireEvent.click(view.getByRole('button', { name: '취소', exact: true }))
+      assert.equal(view.getByLabelText('새 할 일').value, '저장 중인 할 일')
+      assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-09-30')
+    } else {
+      assert.equal(view.queryByRole('dialog'), null)
+      assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-10-01')
+      assert.equal(view.getByLabelText('새 할 일').value, '')
+    }
+  })
+}
+
+test('clean midnight advances today, keeps historical selection, and account change clears draft and dialog', async () => {
+  const view = mount()
+  await view.findByLabelText('새 할 일')
+  view.setToday('2026-10-01')
+  assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-10-01')
+  view.past()
+  view.setToday('2026-10-02')
+  assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-09-29')
+  fireEvent.click(view.getByRole('button', { name: '오늘로', exact: true }))
+  await waitFor(() => assert.equal(view.getByLabelText('새 할 일').disabled, false))
+  fireEvent.change(view.getByLabelText('새 할 일'), { target: { value: '이전 계정 내용' } })
+  view.past()
+  assert.ok(view.getByRole('dialog'))
+  view.setUser('other')
+  await waitFor(() => assert.equal(view.getByLabelText('새 할 일').disabled, false))
+  assert.equal(view.queryByRole('dialog'), null)
+  assert.equal(view.getByLabelText('새 할 일').value, '')
+  assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-10-02')
+})
+
+test('successful editing removes protection and a late save cannot affect another account', async () => {
+  const view = mount()
+  await view.findByLabelText('지난 할 일 더보기')
+  fireEvent.click(view.getByLabelText('지난 할 일 더보기'))
+  fireEvent.click(view.getByRole('button', { name: '수정하기' }))
+  fireEvent.change(view.getByLabelText('할 일 수정'), { target: { value: '저장할 수정' } })
+  fireEvent.click(view.getByRole('button', { name: '저장', exact: true }))
+  await waitFor(() => assert.equal(view.getByLabelText('할 일 조회 날짜').disabled, false))
+  await act(async () => view.past())
+  assert.equal(view.queryByRole('dialog'), null)
+  fireEvent.click(view.getByRole('button', { name: '오늘로', exact: true }))
+  await waitFor(() => assert.equal(view.getByLabelText('새 할 일').disabled, false))
+  let finish
+  view.options.create = () => new Promise(resolve => { finish = resolve })
+  fireEvent.change(view.getByLabelText('새 할 일'), { target: { value: '이전 계정 저장 중' } })
+  fireEvent.click(view.getByRole('button', { name: '추가' }))
+  view.setUser('other')
+  await waitFor(() => assert.equal(view.getByLabelText('새 할 일').disabled, false))
+  fireEvent.change(view.getByLabelText('새 할 일'), { target: { value: '새 계정 작성 중' } })
+  await act(async () => finish())
+  assert.equal(view.getByLabelText('새 할 일').value, '새 계정 작성 중')
+  assert.equal(view.queryByRole('dialog'), null)
+})
+
+test('useToday updates at midnight and tab return and cleans up its timer on unmount', t => {
+  const { useToday } = loader({ '../lib/todos': { localDate: (now = new Date()) =>
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+  } })('../src/hooks/useToday.ts')
+  function Clock() { return createElement('output', null, useToday()) }
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: new Date(2026, 8, 30, 23, 59, 59, 900).getTime() })
+  const view = render(createElement(Clock))
+  assert.ok(view.getByText('2026-09-30'))
+  act(() => t.mock.timers.tick(300))
+  assert.ok(view.getByText('2026-10-01'))
+  t.mock.timers.setTime(new Date(2026, 9, 2, 12).getTime())
+  act(() => window.dispatchEvent(new window.Event('focus')))
+  assert.ok(view.getByText('2026-10-02'))
+  t.mock.timers.setTime(new Date(2026, 9, 3, 12).getTime())
+  act(() => document.dispatchEvent(new window.Event('visibilitychange')))
+  assert.ok(view.getByText('2026-10-03'))
+  view.unmount()
+  act(() => t.mock.timers.tick(86_400_000))
+  assert.equal(view.container.childElementCount, 0)
+})
+
+test('midnight keeps a historical date and blocks carry until the new day receipts are loaded', async () => {
+  let finish
+  const reads = []
+  const view = mount({ receipts: (uid, date) => {
+    reads.push([uid, date])
+    if (date === '2026-10-01') return new Promise(resolve => { finish = resolve })
+    return new Set()
+  } })
+  view.past()
+  await waitFor(() => assert.equal(view.getByLabelText('지난 할 일 이월 선택').disabled, false))
+  view.setToday('2026-10-01')
+  assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-09-29')
+  assert.equal(view.getByLabelText('지난 할 일 이월 선택').disabled, true)
+  assert.deepEqual(reads.at(-1), ['owner', '2026-10-01'])
+  await act(async () => finish(new Set(['source'])))
+  assert.ok(view.getByText('오늘로 이월됨'))
+})
 
 test('receipt failure preserves past list and summary, blocks carry, and recovers on refresh', async () => {
   const view = mount({ receipts: () => { throw new FirebaseError('permission-denied', '') } })
