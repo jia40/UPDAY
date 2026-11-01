@@ -13,7 +13,7 @@ globalThis.HTMLElement = dom.window.HTMLElement
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.window.navigator })
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const { render, fireEvent, waitFor, cleanup, within, act } = await import('@testing-library/react')
-const { createElement } = await import('react')
+const { createElement, useState } = await import('react')
 afterEach(() => { cleanup(); window.history.replaceState({}, '', '/study') })
 
 function loader(mocks = {}) {
@@ -58,7 +58,11 @@ test('month shifting handles year and supported date boundaries and rejects inva
   assert.throws(() => analytics.monthlyStudySummary([], '2026-11', '2026-10-27'))
 })
 test('monthly controls navigate independently and recompute after record updates or month rollover', async () => {
-  const Monthly = loader()('../src/components/StudyMonthlyStats.tsx').default
+  const MonthlyStats = loader()('../src/components/StudyMonthlyStats.tsx').default
+  function Monthly(props) {
+    const [selectedMonth, onMonthChange] = useState(null)
+    return createElement(MonthlyStats, { ...props, selectedMonth, onMonthChange })
+  }
   const logs = [entry('2026-10-01', 60), entry('2026-09-30', 45)]
   const view = render(createElement(Monthly, { logs, today: '2026-10-27' }))
   assert.ok(view.getByText('1시간'))

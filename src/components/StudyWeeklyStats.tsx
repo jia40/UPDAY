@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { StudySummary } from '../lib/studyLogs'
 import { formatStudyTime, shiftStudyDate, studyWeekStart, weeklyStudySummary } from '../lib/studyAnalytics'
 
 const weekdays = ['월', '화', '수', '목', '금', '토', '일']
 
-export default function StudyWeeklyStats({ logs, today }: { logs: StudySummary[]; today: string }) {
-  const [selectedWeek, setSelectedWeek] = useState<string | null>(null)
+export default function StudyWeeklyStats({ logs, today, selectedWeek, onWeekChange }: {
+  logs: StudySummary[]; today: string; selectedWeek: string | null; onWeekChange: (week: string | null) => void
+}) {
   const currentWeek = studyWeekStart(today)
   const anchor = selectedWeek && selectedWeek < currentWeek ? selectedWeek : currentWeek
   const summary = useMemo(() => weeklyStudySummary(logs, anchor), [logs, anchor])
@@ -15,9 +16,9 @@ export default function StudyWeeklyStats({ logs, today }: { logs: StudySummary[]
       <div className="study-heading-row">
         <h2 id="study-weekly-heading">주간 학습 통계</h2>
         <div className="study-weekly-nav" aria-label="통계 주간 선택">
-          <button type="button" disabled={summary.start < '0001-01-08'} onClick={() => setSelectedWeek(shiftStudyDate(summary.start, -7))}>이전 주</button>
-          <button type="button" disabled={anchor === currentWeek} onClick={() => setSelectedWeek(null)}>이번 주</button>
-          <button type="button" disabled={anchor === currentWeek} onClick={() => setSelectedWeek(shiftStudyDate(summary.start, 7))}>다음 주</button>
+          <button type="button" disabled={summary.start < '0001-01-08'} onClick={() => onWeekChange(shiftStudyDate(summary.start, -7))}>이전 주</button>
+          <button type="button" disabled={anchor === currentWeek} onClick={() => onWeekChange(null)}>이번 주</button>
+          <button type="button" disabled={anchor === currentWeek} onClick={() => onWeekChange(shiftStudyDate(summary.start, 7))}>다음 주</button>
         </div>
       </div>
       <p className="study-help" role="status">{summary.start} ~ {summary.end} · 월요일~일요일</p>

@@ -14,14 +14,18 @@ type StudyListProps = {
   overview: StudySummary[]
   revision: number
   loading: boolean
+  hasLoaded?: boolean
   error: string
   reload: () => void
 }
 
-export default function StudyList({ userId, overview, revision, loading, error, reload }: StudyListProps) {
+export default function StudyList({ userId, overview, revision, loading, hasLoaded = false, error, reload }: StudyListProps) {
   const today = useToday()
   const [selectedDate, setSelectedDate] = useState<string | null>(() => studyDateFromSearch(window.location.search, today))
   const [selectedTag, setSelectedTag] = useState('')
+  // Keep period selection above the loading/error branches that unmount statistics.
+  const [selectedWeek, setSelectedWeek] = useState<string | null>(null)
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null)
   const [period, setPeriod] = useState<StudyPeriod>(() => selectedDate ? Number(selectedDate.slice(0, 4)) : 'recent')
   const dates = useMemo(() => overview.map(studyLogDate), [overview])
   const years = useMemo(() => studyYears(dates, today), [dates, today])
@@ -33,14 +37,14 @@ export default function StudyList({ userId, overview, revision, loading, error, 
   const visibleLogs = filterStudyLogs(overview, filterDate, filterTag)
   const needsDateMigration = overview.some(log => !log.studyDate)
 
-  if (loading) return <p role="status">학습 기록을 불러오고 있습니다.</p>
+  if (loading) return <p role="status">{hasLoaded ? '학습 기록을 새로 불러오고 있습니다.' : '학습 기록을 불러오고 있습니다.'}</p>
   if (error) return <div className="study-panel" role="alert"><p>{error}</p><button type="button" onClick={reload}>다시 불러오기</button></div>
 
   return <>
     <StudyHeatmap data={heatmap} selectedDate={filterDate} onSelect={setSelectedDate}
       period={activePeriod} years={years} onPeriodChange={(value) => { setPeriod(value); setSelectedDate(null) }} />
-    <StudyWeeklyStats logs={overview} today={today} />
-    <StudyMonthlyStats logs={overview} today={today} />
+    <StudyWeeklyStats logs={overview} today={today} selectedWeek={selectedWeek} onWeekChange={setSelectedWeek} />
+    <StudyMonthlyStats logs={overview} today={today} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />
     <section className="study-panel" aria-label="학습 기록 목록">
       <div className="study-filter">
         <button type="button" onClick={() => reload()}>학습 기록 새로고침</button>
