@@ -19,7 +19,7 @@ dom.window.HTMLDialogElement.prototype.showModal = function () { this.setAttribu
 dom.window.HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
 const { render, fireEvent, waitFor, cleanup, act } = await import('@testing-library/react')
 const { createElement } = await import('react')
-afterEach(() => { cleanup(); window.history.replaceState({}, '', '/interview') })
+afterEach(() => { cleanup(); delete document.visibilityState; window.history.replaceState({}, '', '/interview') })
 
 function loader(mocks = {}, navigate = () => {}) {
   const cache = new Map()
@@ -84,14 +84,91 @@ test('owner queries, deterministic newest ordering and single-record lookup', as
   assert.equal(await api.fetchApplication('owner', 'bad/id'), null)
 })
 function mount(url, overrides = {}) {
+  let userId = 'owner'
   window.history.replaceState({}, '', url)
   const calls = []
   const api = { ...library().api, fetchApplications: async () => [record], fetchApplication: async () => record,
     createApplication: async (...args) => calls.push(args), changeApplicationStatus: async (...args) => calls.push(args), deleteApplication: async (...args) => calls.push(args), ...overrides }
-  const Page = loader({ '../hooks/useAuth': { useAuth: () => ({ user: { uid: 'owner' }, isLoading: false }) }, '../lib/applications': api,
+  const Page = loader({ '../hooks/useAuth': { useAuth: () => ({ user: { uid: userId }, isLoading: false }) }, '../lib/applications': api,
     '../lib/todos': { localDate: () => '2026-10-10' }, '../hooks/useLogoutGuard': { useLogoutGuard: () => null }, './useLogoutGuard': { useLogoutGuard: () => null } })('../src/pages/JobPage.tsx').default
-  return { view: render(createElement(Page)), calls }
+  const view = render(createElement(Page))
+  return { view, calls, setUser: value => { userId = value; view.rerender(createElement(Page)) } }
 }
+
+function returnToJob() {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+  act(() => {
+    window.dispatchEvent(new window.Event('focus'))
+    document.dispatchEvent(new window.Event('visibilitychange'))
+    window.dispatchEvent(new window.PageTransitionEvent('pageshow', { persisted: true }))
+  })
+}
+const flushJobEvents = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 150)) })
+
+test('job return refresh shares in-flight requests, preserves filter and keeps old records on failure', async () => {
+  const requests = []
+  const { view } = mount('/job', { fetchApplications: uid => new Promise((resolve, reject) => requests.push({ uid, resolve, reject })) })
+  await waitFor(() => assert.equal(requests.length, 1))
+  await act(async () => requests[0].resolve([{ ...record, status: 'accepted' }]))
+  fireEvent.change(view.getByLabelText('지원 상태 필터'), { target: { value: 'accepted' } })
+  returnToJob()
+  await waitFor(() => assert.equal(requests.length, 2))
+  returnToJob()
+  await flushJobEvents()
+  assert.equal(requests.length, 2)
+  await act(async () => requests[1].reject(new Error('목록 갱신 실패')))
+  assert.ok(view.getByText('기업'))
+  assert.ok(view.getByRole('alert'))
+  assert.equal(view.getByLabelText('지원 상태 필터').value, 'accepted')
+  fireEvent.click(view.getByRole('button', { name: '다시 불러오기' }))
+  await waitFor(() => assert.equal(requests.length, 3))
+  await act(async () => requests[2].resolve([{ ...record, company: '갱신된 기업', status: 'accepted' }]))
+  assert.ok(view.getByText('갱신된 기업'))
+  assert.equal(view.queryByRole('alert'), null)
+})
+
+for (const url of ['/job?new=1', '/job?application=one&edit=1', '/job?application=one']) {
+  test(`return events never re-fetch or reset Job form/detail at ${url}`, async () => {
+    let reads = 0
+    const { view } = mount(url, { fetchApplication: async () => { reads++; return record } })
+    if (url.includes('new=') || url.includes('edit=')) {
+      const company = await view.findByLabelText('기업명 *')
+      fireEvent.change(company, { target: { value: '작성 내용 유지' } })
+    } else await view.findByText('기업')
+    const before = reads
+    returnToJob()
+    await flushJobEvents()
+    assert.equal(reads, before)
+    if (!url.endsWith('one')) assert.equal(view.getByLabelText('기업명 *').value, '작성 내용 유지')
+  })
+}
+
+test('Job ignores hidden/non-restored events and old account results; unmount cancels queued refresh', async () => {
+  const requests = []
+  const { view, setUser } = mount('/job', { fetchApplications: uid => new Promise(resolve => requests.push({ uid, resolve })) })
+  await waitFor(() => assert.equal(requests.length, 1))
+  await act(async () => requests[0].resolve([record]))
+  act(() => window.dispatchEvent(new window.Event('focus')))
+  await flushJobEvents()
+  assert.equal(requests.length, 1)
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+  act(() => window.dispatchEvent(new window.PageTransitionEvent('pageshow', { persisted: false })))
+  await flushJobEvents()
+  assert.equal(requests.length, 1)
+  returnToJob()
+  await waitFor(() => assert.equal(requests.length, 2))
+  setUser('other')
+  await waitFor(() => assert.equal(requests.length, 3))
+  assert.equal(requests[2].uid, 'other')
+  await act(async () => requests[2].resolve([{ ...record, company: '새 계정 기업' }]))
+  await act(async () => requests[1].resolve([{ ...record, company: '이전 계정 기업' }]))
+  assert.equal(view.queryByText('이전 계정 기업'), null)
+  assert.ok(view.getByText('새 계정 기업'))
+  returnToJob()
+  view.unmount()
+  await flushJobEvents()
+  assert.equal(requests.length, 3)
+})
 test('job list filters states and displays empty filtered result', async () => {
   const { view } = mount('/job')
   await view.findByText('기업')
