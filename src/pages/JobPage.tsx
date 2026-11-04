@@ -1,4 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useState, type FormEvent } from 'react'
+import { useRefreshTask } from '../hooks/useRefreshTask'
+import { usePageRefresh } from '../hooks/usePageRefresh'
 import { useAuth } from '../hooks/useAuth'
 import { useToday } from '../hooks/useToday'
 import { useStudyMutation } from '../hooks/useStudyMutation'
@@ -69,21 +71,20 @@ function JobRecords({ userId, id, editing }: { userId: string; id: string | null
   const [records, setRecords] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [retry, setRetry] = useState(0)
+  const [hasLoaded, setHasLoaded] = useState(false)
   const [filter, setFilter] = useState('')
-  useEffect(() => {
-    let active = true
-    const request = id !== null ? fetchApplication(userId, id).then(item => item ? [item] : []) : fetchApplications(userId)
-    request.then(items => { if (active) { setRecords(items); setError(''); setLoading(false) } }).catch(reason => { if (active) { setError(errorText(reason)); setLoading(false) } })
-    return () => { active = false }
-  }, [userId, id, retry])
-  useEffect(() => {
-    const restore = (event: PageTransitionEvent) => { if (event.persisted) { setLoading(true); setRetry(value => value + 1) } }
-    window.addEventListener('pageshow', restore)
-    return () => window.removeEventListener('pageshow', restore)
-  }, [])
+  const load = useCallback(async (isCurrent: () => boolean) => {
+    try {
+      const items = id !== null ? await fetchApplication(userId, id).then(item => item ? [item] : []) : await fetchApplications(userId)
+      if (isCurrent()) { setRecords(items); setHasLoaded(true); setError('') }
+    } catch (reason) { if (isCurrent()) setError(errorText(reason)) }
+    finally { if (isCurrent()) setLoading(false) }
+  }, [userId, id])
+  const refresh = useRefreshTask(load)
+  usePageRefresh(refresh.request, id === null)
+  function retry() { if (!hasLoaded) setLoading(true); void refresh.request() }
   if (loading) return <p role="status">지원 기록을 불러오고 있습니다.</p>
-  if (error) return <section className="job-panel"><p role="alert">{error}</p><button onClick={() => { setLoading(true); setError(''); setRetry(value => value + 1) }}>다시 불러오기</button></section>
+  if (error && !hasLoaded) return <section className="job-panel"><p role="alert">{error}</p><button onClick={retry}>다시 불러오기</button></section>
   if (id !== null) {
     const record = records[0]
     if (!record) return <section className="job-panel"><h2>지원 기록을 찾을 수 없습니다.</h2><a href="/job">목록으로 돌아가기</a></section>
@@ -91,7 +92,8 @@ function JobRecords({ userId, id, editing }: { userId: string; id: string | null
   }
   const visible = records.filter(record => !filter || record.status === filter)
   return <section className="job-panel"><h2>내 지원 기록 {records.length}개</h2><label htmlFor="job-filter">지원 상태 필터</label><select id="job-filter" value={filter} onChange={e => setFilter(e.target.value)}><option value="">전체</option><StatusOptions /></select>
-    {visible.length ? <ul className="job-list">{visible.map(record => <li key={record.id}><a href={'/job?application=' + encodeURIComponent(record.id)}><strong className="job-question">{record.company}</strong><span className="job-question">{record.position}</span><span className="job-help">{applicationStatuses[record.status]} · {record.appliedAt || '지원일 미입력'}</span></a></li>)}</ul> : <div className="job-empty"><p>{records.length ? '선택한 상태의 기록이 없습니다.' : '아직 등록한 지원 기록이 없습니다.'}</p>{!records.length && <a href="/job?new=1">첫 지원 기록 등록하기</a>}</div>}
+    {error && <div role="alert"><p>{error}</p><button onClick={retry}>다시 불러오기</button></div>}
+    {visible.length ? <ul className="job-list">{visible.map(record => <li key={record.id}><a href={'/job?application=' + encodeURIComponent(record.id)}><strong className="job-question">{record.company}</strong><span className="job-question">{record.position}</span><span className="job-help">{applicationStatuses[record.status]} · {record.appliedAt || '지원일 미입력'}</span></a></li>)}</ul> : !error && <div className="job-empty"><p>{records.length ? '선택한 상태의 기록이 없습니다.' : '아직 등록한 지원 기록이 없습니다.'}</p>{!records.length && <a href="/job?new=1">첫 지원 기록 등록하기</a>}</div>}
   </section>
 }
 export default function JobPage() {

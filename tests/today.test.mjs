@@ -18,7 +18,7 @@ dom.window.HTMLDialogElement.prototype.showModal = function () { this.setAttribu
 dom.window.HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
 const { render, fireEvent, waitFor, cleanup, act, within } = await import('@testing-library/react')
 const { createElement } = await import('react')
-afterEach(cleanup)
+afterEach(() => { cleanup(); delete document.visibilityState })
 
 function loader(mocks) {
   const cache = new Map()
@@ -41,13 +41,22 @@ function loader(mocks) {
   return load
 }
 const item = { id: 'source', userId: 'owner', title: '지난 할 일', completed: false, date: '2026-09-29' }
+function returnToTab() {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+  act(() => {
+    window.dispatchEvent(new window.Event('focus'))
+    document.dispatchEvent(new window.Event('visibilitychange'))
+    window.dispatchEvent(new window.PageTransitionEvent('pageshow', { persisted: true }))
+  })
+}
+const flushReturnEvents = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 150)) })
 function mount(options = {}) {
   let today = '2026-09-30'
   let userId = 'owner'
-  const calls = { carry: [], create: [], rename: [], complete: [], remove: [] }
+  const calls = { carry: [], create: [], rename: [], complete: [], remove: [], reads: [], receipts: [] }
   const api = {
-    fetchTodos: async (_uid, date) => options.todos ? options.todos(date) : [{ ...item, date }],
-    fetchCarriedTodoIds: async (uid, date) => options.receipts ? options.receipts(uid, date) : new Set(),
+    fetchTodos: async (uid, date) => { calls.reads.push([uid, date]); return options.todos ? options.todos(date, uid) : [{ ...item, date }] },
+    fetchCarriedTodoIds: async (uid, date) => { calls.receipts.push([uid, date]); return options.receipts ? options.receipts(uid, date) : new Set() },
     carryTodos: async (...args) => { calls.carry.push(args) },
     createTodo: async (...args) => { calls.create.push(args); await options.create?.(...args) },
     renameTodo: async (...args) => { calls.rename.push(args); await options.rename?.(...args) },
@@ -88,6 +97,112 @@ test('dirty new input confirms date changes, cancel preserves input, approval cl
   await view.findByLabelText('새 할 일')
   assert.equal(view.getByLabelText('새 할 일').value, '')
   assert.deepEqual(view.calls.create, [])
+})
+
+test('tab return coalesces events and in-flight reads while preserving a new todo draft', async () => {
+  const view = mount()
+  await view.findByLabelText('지난 할 일 더보기')
+  fireEvent.change(view.getByLabelText('새 할 일'), { target: { value: '작성 중' } })
+  let finish
+  view.options.todos = () => new Promise(resolve => { finish = resolve })
+  returnToTab()
+  await waitFor(() => assert.equal(view.calls.reads.length, 2))
+  returnToTab()
+  await flushReturnEvents()
+  assert.equal(view.calls.reads.length, 2)
+  await act(async () => finish([{ ...item, title: '다른 탭의 변경' }]))
+  assert.ok(view.getByText('다른 탭의 변경'))
+  assert.equal(view.getByLabelText('새 할 일').value, '작성 중')
+})
+
+test('editing invalidates an older read and defers return refresh until editing ends', async () => {
+  const view = mount()
+  await view.findByLabelText('지난 할 일 더보기')
+  let finish
+  view.options.todos = () => new Promise(resolve => { finish = resolve })
+  returnToTab()
+  await waitFor(() => assert.equal(view.calls.reads.length, 2))
+  fireEvent.click(view.getByLabelText('지난 할 일 더보기'))
+  fireEvent.click(view.getByRole('button', { name: '수정하기' }))
+  fireEvent.change(view.getByLabelText('할 일 수정'), { target: { value: '수정 내용 보호' } })
+  await act(async () => finish([]))
+  returnToTab()
+  await flushReturnEvents()
+  assert.equal(view.calls.reads.length, 2)
+  assert.equal(view.getByLabelText('할 일 수정').value, '수정 내용 보호')
+  view.options.todos = () => [{ ...item, id: 'remote', title: '편집 후 최신 기록' }]
+  fireEvent.click(view.getByRole('button', { name: '취소', exact: true }))
+  await view.findByText('편집 후 최신 기록')
+})
+
+test('background failure keeps previous todos and draft, and retry recovers without an empty list', async () => {
+  const view = mount()
+  await view.findByLabelText('지난 할 일 더보기')
+  fireEvent.change(view.getByLabelText('새 할 일'), { target: { value: '오류 중에도 유지' } })
+  view.options.todos = () => { throw new Error('복귀 조회 실패') }
+  returnToTab()
+  await view.findByText('복귀 조회 실패')
+  assert.ok(view.getByLabelText('지난 할 일 더보기'))
+  assert.equal(view.getByLabelText('새 할 일').value, '오류 중에도 유지')
+  assert.equal(view.queryByText('아직 등록한 할 일이 없어요.'), null)
+  view.options.todos = () => [{ ...item, title: '복구된 목록' }]
+  fireEvent.click(view.getByRole('button', { name: '다시 불러오기' }))
+  await view.findByText('복구된 목록')
+  assert.equal(view.queryByText('복귀 조회 실패'), null)
+})
+
+test('historical return reloads receipts for today and clears invalid carry selections', async () => {
+  const view = mount()
+  view.past()
+  await waitFor(() => assert.equal(view.getByLabelText('지난 할 일 이월 선택').disabled, false))
+  fireEvent.click(view.getByLabelText('지난 할 일 이월 선택'))
+  view.options.receipts = () => new Set(['source'])
+  returnToTab()
+  await view.findByText('오늘로 이월됨')
+  assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-09-29')
+  assert.deepEqual(view.calls.receipts.at(-1), ['owner', '2026-09-30'])
+  assert.equal(view.getByLabelText('지난 할 일 이월 선택').checked, false)
+  assert.equal(view.getByRole('button', { name: '오늘로 가져오기' }).disabled, true)
+})
+
+test('a pre-save read cannot overwrite the mutation refresh and return events wait for saving', async () => {
+  let oldRead, finishSave
+  const view = mount({ create: () => new Promise(resolve => { finishSave = resolve }) })
+  await view.findByLabelText('지난 할 일 더보기')
+  view.options.todos = () => new Promise(resolve => { oldRead = resolve })
+  returnToTab()
+  await waitFor(() => assert.equal(view.calls.reads.length, 2))
+  fireEvent.change(view.getByLabelText('새 할 일'), { target: { value: '저장할 항목' } })
+  fireEvent.click(view.getByRole('button', { name: '추가' }))
+  returnToTab()
+  await flushReturnEvents()
+  assert.equal(view.calls.reads.length, 2)
+  view.options.todos = () => [{ ...item, id: 'new', title: '저장할 항목' }]
+  await act(async () => finishSave())
+  await view.findByLabelText('저장할 항목 더보기')
+  assert.equal(view.calls.reads.length, 3)
+  await act(async () => oldRead([]))
+  assert.ok(view.getByLabelText('저장할 항목 더보기'))
+  assert.equal(view.queryByText('아직 등록한 할 일이 없어요.'), null)
+})
+
+test('old account return response and queued timers cannot update a new or unmounted Today screen', async () => {
+  const view = mount()
+  await view.findByLabelText('지난 할 일 더보기')
+  let finish
+  view.options.todos = () => new Promise(resolve => { finish = resolve })
+  returnToTab()
+  await waitFor(() => assert.equal(view.calls.reads.length, 2))
+  view.options.todos = (_date, uid) => [{ ...item, userId: uid, title: '다른 계정 목록' }]
+  view.setUser('other')
+  await view.findByText('다른 계정 목록')
+  await act(async () => finish([{ ...item, title: '이전 계정 응답' }]))
+  assert.equal(view.queryByText('이전 계정 응답'), null)
+  returnToTab()
+  const count = view.calls.reads.length
+  view.unmount()
+  await flushReturnEvents()
+  assert.equal(view.calls.reads.length, count)
 })
 
 test('editing compares with the original title and cancel or reverting removes date protection', async () => {
@@ -157,7 +272,7 @@ for (const fail of [false, true]) {
     await act(async () => { if (fail) reject(new Error('저장 실패')); else finish() })
     if (fail) {
       assert.ok(view.getByRole('dialog', { name: '날짜 변경' }))
-      fireEvent.click(view.getByRole('button', { name: '취소', exact: true }))
+      await act(async () => fireEvent.click(view.getByRole('button', { name: '취소', exact: true })))
       assert.equal(view.getByLabelText('새 할 일').value, '저장 중인 할 일')
       assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-09-30')
     } else {
@@ -246,7 +361,7 @@ test('midnight keeps a historical date and blocks carry until the new day receip
   view.setToday('2026-10-01')
   assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-09-29')
   assert.equal(view.getByLabelText('지난 할 일 이월 선택').disabled, true)
-  assert.deepEqual(reads.at(-1), ['owner', '2026-10-01'])
+  await waitFor(() => assert.deepEqual(reads.at(-1), ['owner', '2026-10-01']))
   await act(async () => finish(new Set(['source'])))
   assert.ok(view.getByText('오늘로 이월됨'))
 })
