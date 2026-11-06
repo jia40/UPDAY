@@ -1,4 +1,4 @@
-import { collection, doc, documentId, getDocsFromServer, query, where, limit, setDoc, updateDoc, deleteDoc, serverTimestamp, type Timestamp } from 'firebase/firestore'
+import { collection, doc, documentId, getDocsFromServer, query, where, orderBy, startAfter, limit, setDoc, updateDoc, deleteDoc, serverTimestamp, type Timestamp, type QueryDocumentSnapshot } from 'firebase/firestore'
 import { db } from './firestore'
 import { validateStudyDate } from './studyAnalytics'
 
@@ -23,9 +23,20 @@ export function validateApplication(input: ApplicationInput): ApplicationInput {
   return values
 }
 export function newApplicationId() { return doc(collection(db, 'applications')).id }
-export async function fetchApplications(userId: string) {
-  const snapshot = await getDocsFromServer(query(collection(db, 'applications'), where('userId', '==', userId)))
-  return snapshot.docs.map(item => ({ ...item.data(), id: item.id }) as Application).sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis() || a.id.localeCompare(b.id))
+export type ApplicationCursor = QueryDocumentSnapshot
+export const APPLICATION_PAGE_SIZE = 20
+export async function fetchApplicationPage(userId: string, status = '', cursor?: ApplicationCursor) {
+  if (status && !Object.hasOwn(applicationStatuses, status)) throw new Error('올바른 지원 상태를 선택해주세요.')
+  const constraints = [where('userId', '==', userId)]
+  if (status) constraints.push(where('status', '==', status))
+  const snapshot = await getDocsFromServer(query(collection(db, 'applications'), ...constraints,
+    orderBy('createdAt', 'desc'), orderBy(documentId(), 'asc'),
+    ...(cursor ? [startAfter(cursor)] : []), limit(APPLICATION_PAGE_SIZE + 1)))
+  const docs = snapshot.docs.slice(0, APPLICATION_PAGE_SIZE)
+  return {
+    items: docs.map(item => ({ ...item.data(), id: item.id }) as Application),
+    cursor: docs.at(-1), hasMore: snapshot.docs.length > APPLICATION_PAGE_SIZE,
+  }
 }
 export async function fetchApplication(userId: string, id: string) {
   if (!id || id.includes('/')) return null

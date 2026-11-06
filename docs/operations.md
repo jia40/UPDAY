@@ -44,6 +44,8 @@ npx --yes firebase-tools deploy --only firestore:rules --project $targetProject
 | --- | --- |
 | 사용자·학습일 정렬 | userId 오름차순, studyDate 내림차순, createdAt 내림차순, 문서 ID 오름차순 |
 | 사용자·태그·학습일 정렬 | userId 오름차순, tags ARRAY_CONTAINS, studyDate 내림차순, createdAt 내림차순, 문서 ID 오름차순 |
+| Job 사용자·생성 시각 정렬 | userId 오름차순, createdAt 내림차순, 문서 ID 오름차순 |
+| Job 사용자·상태·생성 시각 정렬 | userId 오름차순, status 오름차순, createdAt 내림차순, 문서 ID 오름차순 |
 
 기존 운영 인덱스와 병합하고 적용합니다. 기존 인덱스 삭제를 승인하지 마세요. 배포 명령 성공뿐 아니라 콘솔에서 인덱스 빌드 완료를 기다립니다.
 
@@ -52,6 +54,8 @@ npx --yes firebase-tools deploy --only firestore:indexes --project $targetProjec
 ```
 
 에뮬레이터는 운영 복합 인덱스 준비 상태를 검증하지 않습니다. Today의 UID·studyDate 조회와 Interview의 소유자·문서 ID IN 조회도 대상 Firebase에서 실행하여 필요한 경우 콘솔 오류 안내에 따라 기존 설정을 비교·보완합니다.
+
+Job 페이지네이션 배포 전에는 위 applications 인덱스 두 개의 빌드 완료를 확인하고 전체 상태·개별 상태·더 보기를 실제 대상 프로젝트에서 실행합니다. 로컬 설정과 에뮬레이터 테스트만으로 원격 적용 완료를 단정하지 않습니다. 이번 #94 작업에서는 원격 규칙·인덱스 배포를 실행하지 않았습니다. 목록은 페이지 본문만 조회하지만 대시보드 Job 집계의 전체 사용자 상태 조회 비용은 별도로 남습니다.
 
 ## 기존 Study 날짜 보완
 
