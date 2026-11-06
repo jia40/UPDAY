@@ -49,7 +49,7 @@ function library(records = [], fail = false) {
   const calls = []
   const api = loader({ './firestore': { db: {} }, 'firebase/firestore': {
     collection: (_db, name) => name, doc: (...args) => args.length === 1 ? { id: 'new' } : args.slice(1).join('/'),
-    query: (...args) => args, where: (...args) => args, documentId: () => '__name__', limit: n => ['limit', n],
+    query: (...args) => args, where: (...args) => args, documentId: () => '__name__', limit: n => ['limit', n], orderBy: (...args) => ['orderBy', ...args], startAfter: cursor => ['startAfter', cursor],
     serverTimestamp: () => 'server', getDocsFromServer: async q => { calls.push(q); return { docs: records.map(item => ({ id: item.id, data: () => item })) } },
     setDoc: async (...args) => { calls.push(args); if (fail) throw new Error('network') },
     updateDoc: async (...args) => calls.push(args), deleteDoc: async (...args) => calls.push(args),
@@ -77,8 +77,8 @@ test('application CRUD preserves ownership fields and reconciles lost acknowledg
 })
 test('owner queries, deterministic newest ordering and single-record lookup', async () => {
   const { api, calls } = library([record, { ...record, id: 'two', createdAt: { toMillis: () => 2 } }])
-  assert.deepEqual((await api.fetchApplications('owner')).map(item => item.id), ['two', 'one'])
-  assert.deepEqual(calls[0], ['applications', ['userId', '==', 'owner']])
+  assert.deepEqual((await api.fetchApplicationPage('owner')).items.map(item => item.id), ['one', 'two'])
+  assert.deepEqual(calls[0], ['applications', ['userId', '==', 'owner'], ['orderBy', 'createdAt', 'desc'], ['orderBy', '__name__', 'asc'], ['limit', 21]])
   await api.fetchApplication('owner', 'one')
   assert.deepEqual(calls[1], ['applications', ['userId', '==', 'owner'], ['__name__', '==', 'one'], ['limit', 1]])
   assert.equal(await api.fetchApplication('owner', 'bad/id'), null)
@@ -87,7 +87,7 @@ function mount(url, overrides = {}) {
   let userId = 'owner'
   window.history.replaceState({}, '', url)
   const calls = []
-  const api = { ...library().api, fetchApplications: async () => [record], fetchApplication: async () => record,
+  const api = { ...library().api, fetchApplicationPage: async (_uid, status) => ({ items: !status || status === record.status ? [record] : [], hasMore: false }), fetchApplication: async () => record,
     createApplication: async (...args) => calls.push(args), changeApplicationStatus: async (...args) => calls.push(args), deleteApplication: async (...args) => calls.push(args), ...overrides }
   const Page = loader({ '../hooks/useAuth': { useAuth: () => ({ user: { uid: userId }, isLoading: false }) }, '../lib/applications': api,
     '../lib/todos': { localDate: () => '2026-10-10' }, '../hooks/useLogoutGuard': { useLogoutGuard: () => null }, './useLogoutGuard': { useLogoutGuard: () => null } })('../src/pages/JobPage.tsx').default
@@ -107,22 +107,24 @@ const flushJobEvents = () => act(async () => { await new Promise(resolve => setT
 
 test('job return refresh shares in-flight requests, preserves filter and keeps old records on failure', async () => {
   const requests = []
-  const { view } = mount('/job', { fetchApplications: uid => new Promise((resolve, reject) => requests.push({ uid, resolve, reject })) })
+  const { view } = mount('/job', { fetchApplicationPage: uid => new Promise((resolve, reject) => requests.push({ uid, resolve, reject })) })
   await waitFor(() => assert.equal(requests.length, 1))
-  await act(async () => requests[0].resolve([{ ...record, status: 'accepted' }]))
+  await act(async () => requests[0].resolve({ items: [{ ...record, status: 'accepted' }], hasMore: false }))
   fireEvent.change(view.getByLabelText('지원 상태 필터'), { target: { value: 'accepted' } })
-  returnToJob()
   await waitFor(() => assert.equal(requests.length, 2))
+  await act(async () => requests[1].resolve({ items: [{ ...record, status: 'accepted' }], hasMore: false }))
+  returnToJob()
+  await waitFor(() => assert.equal(requests.length, 3))
   returnToJob()
   await flushJobEvents()
-  assert.equal(requests.length, 2)
-  await act(async () => requests[1].reject(new Error('목록 갱신 실패')))
+  assert.equal(requests.length, 3)
+  await act(async () => requests[2].reject(new Error('목록 갱신 실패')))
   assert.ok(view.getByText('기업'))
   assert.ok(view.getByRole('alert'))
   assert.equal(view.getByLabelText('지원 상태 필터').value, 'accepted')
   fireEvent.click(view.getByRole('button', { name: '다시 불러오기' }))
-  await waitFor(() => assert.equal(requests.length, 3))
-  await act(async () => requests[2].resolve([{ ...record, company: '갱신된 기업', status: 'accepted' }]))
+  await waitFor(() => assert.equal(requests.length, 4))
+  await act(async () => requests[3].resolve({ items: [{ ...record, company: '갱신된 기업', status: 'accepted' }], hasMore: false }))
   assert.ok(view.getByText('갱신된 기업'))
   assert.equal(view.queryByRole('alert'), null)
 })
@@ -145,9 +147,9 @@ for (const url of ['/job?new=1', '/job?application=one&edit=1', '/job?applicatio
 
 test('Job ignores hidden/non-restored events and old account results; unmount cancels queued refresh', async () => {
   const requests = []
-  const { view, setUser } = mount('/job', { fetchApplications: uid => new Promise(resolve => requests.push({ uid, resolve })) })
+  const { view, setUser } = mount('/job', { fetchApplicationPage: uid => new Promise(resolve => requests.push({ uid, resolve })) })
   await waitFor(() => assert.equal(requests.length, 1))
-  await act(async () => requests[0].resolve([record]))
+  await act(async () => requests[0].resolve({ items: [record], hasMore: false }))
   act(() => window.dispatchEvent(new window.Event('focus')))
   await flushJobEvents()
   assert.equal(requests.length, 1)
@@ -160,8 +162,8 @@ test('Job ignores hidden/non-restored events and old account results; unmount ca
   setUser('other')
   await waitFor(() => assert.equal(requests.length, 3))
   assert.equal(requests[2].uid, 'other')
-  await act(async () => requests[2].resolve([{ ...record, company: '새 계정 기업' }]))
-  await act(async () => requests[1].resolve([{ ...record, company: '이전 계정 기업' }]))
+  await act(async () => requests[2].resolve({ items: [{ ...record, company: '새 계정 기업' }], hasMore: false }))
+  await act(async () => requests[1].resolve({ items: [{ ...record, company: '이전 계정 기업' }], hasMore: false }))
   assert.equal(view.queryByText('이전 계정 기업'), null)
   assert.ok(view.getByText('새 계정 기업'))
   returnToJob()
@@ -173,7 +175,7 @@ test('job list filters states and displays empty filtered result', async () => {
   const { view } = mount('/job')
   await view.findByText('기업')
   fireEvent.change(view.getByLabelText('지원 상태 필터'), { target: { value: 'accepted' } })
-  assert.ok(view.getByText('선택한 상태의 기록이 없습니다.'))
+  await view.findByText('선택한 상태의 기록이 없습니다.')
 })
 test('failed save retains input, retry reuses ID, and dirty forms protect unload', async () => {
   let fail = true
