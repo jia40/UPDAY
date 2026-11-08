@@ -28,6 +28,14 @@ button {
   font: inherit;
 }
 
+.record-search { margin: 16px 0; }
+.record-search > label { display: block; margin-bottom: 8px; font-weight: 600; }
+.record-search__row { display: flex; flex-wrap: wrap; gap: 8px; }
+.record-search .record-search__row > input { flex: 1; width: auto; min-width: min(100%, 180px); min-height: 44px; padding: 10px 12px; border: 1px solid #b8c9bd; border-radius: 8px; font: inherit; }
+.record-search button { min-height: 44px; padding: 8px 14px; border: 1px solid #c9d8cd; border-radius: 8px; background: #f0f6f2; color: #285d37; font: inherit; cursor: pointer; }
+.record-search :is(input, button):focus-visible { outline: 2px solid #647268; outline-offset: 3px; }
+.record-search-results a { display: flex; flex-direction: column; gap: 8px; overflow-wrap: anywhere; }
+
 .brand-logo {
   display: inline-flex;
   align-items: center;
