@@ -106,6 +106,15 @@ Job 목록은 UID와 선택 상태를 Firestore 쿼리에 적용하고 생성 �
 
 Job 목록도 Today와 같은 복귀 이벤트·요청 공유 구조로 갱신하며 상태 필터를 유지합니다. 복귀 시 현재 필터의 첫 페이지로 교체하고 커서를 재설정하며, 진행 중인 추가 페이지는 무효화합니다. 최초 조회 실패와 재조회 실패를 구분하여 이미 불러온 목록을 오류와 함께 유지합니다. 작성·수정·상세 화면에서는 복귀 이벤트로 다시 조회하지 않습니다. 두 화면 모두 계정·날짜·경로 변경 또는 해제 시 이전 요청 결과와 이벤트를 정리합니다. 실시간 구독·폴링은 사용하지 않습니다.
 
+## 기록 검색
+
+- 공통 정책은 searchPolicy, UID 제한 REST 필드 선택 조회는 recordSearch, 명시적 제출·초기화는 RecordSearch, 결과·조회 상태는 RecordSearchResults에서 관리합니다. 결과 모듈은 검색 실행 시 지연 로드합니다.
+- Study는 title·studyDate·studyMinutes·tags·createdAt, Interview는 question·status·tags·lastReviewedAt·createdAt, Job은 company·position·status·appliedAt·createdAt만 가져옵니다. content·answer·memo·url은 조회하지 않으며 Job position은 표시용으로만 사용합니다.
+- 검색 대상의 앞뒤 공백과 대소문자를 정규화한 부분 일치를 적용하고 기존 날짜·태그·상태·복습 조건과 교집합으로 계산합니다. Study 날짜 fallback과 Interview 복습 기준은 기존 함수를 재사용합니다. 통계·대시보드 집계에는 검색 조건을 적용하지 않습니다.
+- 사용자 전체 검색용 필드 조회 후 일치 결과를 메모리에서 20개씩 표시합니다. 검색 결과 전체 개수와 현재 표시 개수를 구분하며 검색어·필터 변경 시 표시 페이지를 초기화합니다. 조건 변경만으로 서버를 다시 조회하지 않습니다.
+- 검색 화면이 해제되면 메모리 데이터를 버리고 계정 변경 시 입력과 조회 상태를 초기화합니다. 탭 복귀·뒤로가기 복원·오류 재시도 시 갱신하고 동시 요청은 기존 요청 큐로 병합합니다. CRUD 후 목록 재진입 시 새로 조회합니다. 원격 변경은 다음 갱신 때 반영하며 실시간 검색 구독은 없습니다.
+- 검색을 위한 데이터 마이그레이션·보안 규칙·복합 인덱스 변경은 없습니다. 필드 선택은 전송량을 줄이지만 문서 읽기 과금이나 최초 전체 사용자 검색 비용을 없애지는 않습니다. 기록이 많아지면 서버 검색 서비스나 별도 검색 인덱스 도입을 검토해야 합니다.
+
 ## 주요 파일
 
 | 위치 | 역할 |
@@ -114,6 +123,6 @@ Job 목록도 Today와 같은 복귀 이벤트·요청 공유 구조로 갱신�
 | src/hooks/ | 인증 소비·조회·mutation·작성 내용 보호 |
 | src/lib/ | Firebase 초기화·데이터 접근·날짜/통계 계산·캐시 |
 | src/pages/ | 화면 진입과 경로 분기 |
-| firestore.rules / firestore.indexes.json | 로컬 접근 규칙 / Study 복합 인덱스 |
+| firestore.rules / firestore.indexes.json | 로컬 접근 규칙 / Study·Job 복합 인덱스 |
 | scripts/backfill-study-dates.mjs | 기존 학습 날짜 보완. 기본 dry run |
 | tests/ | React·순수 로직·에뮬레이터 규칙 검증 |

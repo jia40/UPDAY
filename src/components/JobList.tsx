@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useJobPage } from '../hooks/useJobPage'
 import { applicationStatuses } from '../lib/applications'
 import StatusOptions from './JobStatusOptions'
+import { SearchForm, SearchResults } from './RecordSearch'
 
 function JobRecords({ userId, filter }: { userId: string; filter: string }) {
   const { items, pending, error, hasLoaded, hasMore, loadMore, retry } = useJobPage(userId, filter)
@@ -19,9 +20,12 @@ function JobRecords({ userId, filter }: { userId: string; filter: string }) {
 
 export default function JobList({ userId }: { userId: string }) {
   const [filter, setFilter] = useState('')
+  const [search, setSearch] = useState({ draft: '', query: '' })
   return <section className="job-panel" aria-label="지원 기록 목록">
     <h2>내 지원 기록</h2>
+    <SearchForm label="기업명" value={search} onChange={setSearch} />
     <label htmlFor="job-filter">지원 상태 필터</label><select id="job-filter" value={filter} onChange={event => setFilter(event.target.value)}><option value="">전체</option><StatusOptions /></select>
-    <JobRecords key={`${userId}:${filter}`} userId={userId} filter={filter} />
+    {search.query ? <SearchResults kind="job" userId={userId} query={search.query} filters={{ status: filter }} statusLabels={applicationStatuses} />
+      : <JobRecords key={`${userId}:${filter}`} userId={userId} filter={filter} />}
   </section>
 }
