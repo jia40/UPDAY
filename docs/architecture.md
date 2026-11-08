@@ -22,11 +22,12 @@ MainLayout은 보호 경로의 인증을 확인합니다. GuestOnly는 최초 �
 | --- | --- |
 | `todos/{todoId}` | userId, title, completed, date, createdAt, 선택 sourceTodoId |
 | `users/{userId}/todoCarryovers/{receiptId}` | sourceTodoId, targetTodoId, date, createdAt |
+| `users/{userId}/dailyNotes/{date}` | date, text, updatedAt |
 | `studyLogs/{logId}` | userId, title, content, tags, studyMinutes, studyDate, createdAt |
 | `interviewQuestions/{questionId}` | userId, question, answer, tags, status, lastReviewedAt, createdAt |
 | `applications/{applicationId}` | userId, company, position, url, status, appliedAt, memo, createdAt, updatedAt |
 
-users 경로는 현재 이월 영수증의 상위 경로이며 일반 계정 프로필 컬렉션으로 사용하지 않습니다. studyDate는 신규 Study 기록에 필수이며 과거 문서에는 없을 수 있습니다. appliedAt은 타임스탬프가 아니라 날짜 문자열 또는 빈 문자열입니다.
+users 경로는 이월 영수증과 한 줄 기록의 상위 경로이며 일반 계정 프로필 컬렉션으로 사용하지 않습니다. studyDate는 신규 Study 기록에 필수이며 과거 문서에는 없을 수 있습니다. appliedAt은 타임스탬프가 아니라 날짜 문자열 또는 빈 문자열입니다.
 
 ## 입력과 저장 규칙
 
@@ -58,6 +59,13 @@ Todo·Study·Interview·Job 생성은 같은 문서 ID로 재시도합니다. �
 - 학습 시간은 studyLogs의 UID·studyDate 조건으로 조회·합산합니다. studyDate 없는 기존 기록은 날짜 보완 전에는 포함되지 않습니다.
 - Today 목록은 화면이 보일 때 focus·visibilitychange·뒤로가기 복원(pageshow persisted)으로 갱신합니다. 연속 복귀 이벤트는 100ms 동안 묶고 진행 중 조회는 공유합니다. 선택 날짜·새 할 일 입력을 유지하며 과거 날짜의 이월 영수증도 함께 확인하고 유효하지 않은 선택을 제거합니다.
 - 편집·저장·확인창 표시 중에는 Today의 복귀 조회를 보류합니다. 편집 시작·변경 작업 전에 기존 요청을 무효화하고, 편집 종료 또는 변경 작업 후 최신 조회를 실행합니다. 조회 실패 시 기존 목록과 입력은 보존하고 오류·재시도를 표시합니다.
+
+## Today 한 줄 기록
+
+- 선택한 날짜를 문서 ID로 사용합니다. 등록·수정·실패 후 재시도 모두 같은 문서에 저장하며 `updatedAt`은 서버 시각을 사용합니다. 과거 날짜의 한 줄 기록은 편집할 수 있고 과거 할 일은 조회 전용입니다.
+- 줄바꿈은 공백으로 바꾸고 앞뒤 공백을 제거한 1~200자만 저장합니다. 규칙은 소유자 단건 조회·저장·삭제와 날짜/필드 검증을 적용합니다. 목록 조회와 복합 색인은 필요하지 않습니다.
+- 날짜 변경·내부 이동·로그아웃·새로고침 때 미저장 입력을 보호합니다. 저장 중 날짜 전환과 로그아웃을 제한하며, 계정·날짜가 바뀌면 화면 상태와 이전 조회를 정리합니다. 탭 복귀 조회는 입력 중이면 보류하고, 조회 도중 입력을 시작해도 입력을 덮어쓰지 않습니다.
+- 저장소 커밋 `74c6c08`의 #69 작업은 Study 학습 시간 요약을 Today에 연동한 변경입니다. 날짜별 한 줄 기록은 별도 작업 #98입니다.
 
 ## Study 조회·통계
 
