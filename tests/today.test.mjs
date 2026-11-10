@@ -12,6 +12,8 @@ globalThis.window = dom.window
 globalThis.document = dom.window.document
 globalThis.HTMLElement = dom.window.HTMLElement
 globalThis.Node = dom.window.Node
+globalThis.Element = dom.window.Element
+globalThis.HTMLAnchorElement = dom.window.HTMLAnchorElement
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.window.navigator })
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 dom.window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
@@ -54,6 +56,8 @@ function mount(options = {}) {
   let today = '2026-09-30'
   let userId = 'owner'
   const calls = { carry: [], create: [], rename: [], complete: [], remove: [], reads: [], receipts: [] }
+  const notes = new Map()
+  const noteCalls = { reads: [], writes: [], deletes: [] }
   const api = {
     fetchTodos: async (uid, date) => { calls.reads.push([uid, date]); return options.todos ? options.todos(date, uid) : [{ ...item, date }] },
     fetchCarriedTodoIds: async (uid, date) => { calls.receipts.push([uid, date]); return options.receipts ? options.receipts(uid, date) : new Set() },
@@ -66,13 +70,20 @@ function mount(options = {}) {
   }
   const page = loader({
     '../lib/todos': api,
+    '../lib/dailyNotes': {
+      DAILY_NOTE_LIMIT: 200, singleLine: text => text.replace(/[\r\n\u2028\u2029]+/g, ' '),
+      fetchDailyNote: async (uid, date) => { noteCalls.reads.push([uid, date]); return options.noteRead ? options.noteRead(uid, date) : notes.get(`${uid}:${date}`) ?? '' },
+      saveDailyNote: async (uid, date, text) => { noteCalls.writes.push([uid, date, text]); await options.noteWrite?.(); notes.set(`${uid}:${date}`, text.trim()) },
+      deleteDailyNote: async (uid, date) => { noteCalls.deletes.push([uid, date]); notes.delete(`${uid}:${date}`) },
+    },
+    './useLogoutGuard': { useLogoutGuard: () => options.logoutGuard ?? null },
     '../components/TodayStudySummary': { __esModule: true, default: () => null },
     '../hooks/useAuth': { useAuth: () => ({ user: userId ? { uid: userId } : null, isLoading: false }) },
     '../hooks/useToday': { useToday: () => today },
   })('../src/pages/TodayPage.tsx')
   const view = render(createElement(page.default))
   const past = () => fireEvent.change(view.getByLabelText('할 일 조회 날짜'), { target: { value: '2026-09-29' } })
-  return { ...view, options, calls, past,
+  return { ...view, options, calls, noteCalls, past,
     setToday: value => { today = value; view.rerender(createElement(page.default)) },
     setUser: value => { userId = value; view.rerender(createElement(page.default)) },
   }
@@ -97,6 +108,113 @@ test('dirty new input confirms date changes, cancel preserves input, approval cl
   await view.findByLabelText('새 할 일')
   assert.equal(view.getByLabelText('새 할 일').value, '')
   assert.deepEqual(view.calls.create, [])
+})
+
+test('daily note past-date save retries without losing input, blocks date changes, then updates and deletes', async () => {
+  let fail = true, finish
+  const view = mount({ noteWrite: async () => { if (fail) throw new Error('메모 저장 실패'); await new Promise(resolve => { finish = resolve }) } })
+  view.past()
+  const note = within(await view.findByRole('region', { name: '한 줄 기록' }))
+  const input = await note.findByLabelText('한 줄 기록 내용')
+  const save = () => note.getByRole('button', { name: '한 줄 기록 저장' })
+  fireEvent.change(input, { target: { value: '회고\n한 줄' } })
+  assert.equal(input.value, '회고 한 줄')
+  assert.ok(note.getByText('6 / 200자'))
+  fireEvent.click(save())
+  await note.findByText('메모 저장 실패')
+  assert.equal(input.value, '회고 한 줄')
+  fail = false
+  fireEvent.click(save()); fireEvent.click(save())
+  assert.equal(view.getByLabelText('할 일 조회 날짜').disabled, true)
+  assert.equal(view.getByRole('button', { name: '오늘로', exact: true }).disabled, true)
+  assert.deepEqual(view.noteCalls.writes, [['owner', '2026-09-29', '회고 한 줄'], ['owner', '2026-09-29', '회고 한 줄']])
+  await act(async () => finish())
+  assert.ok(note.getByText('한 줄 기록을 저장했습니다.'))
+  view.options.noteWrite = undefined
+  fireEvent.change(input, { target: { value: '수정한 회고' } })
+  await act(async () => fireEvent.click(save()))
+  assert.deepEqual(view.noteCalls.writes.at(-1), ['owner', '2026-09-29', '수정한 회고'])
+  fireEvent.click(note.getByRole('button', { name: '한 줄 기록 삭제' }))
+  await act(async () => fireEvent.click(within(view.getByRole('dialog')).getByRole('button', { name: '삭제하기' })))
+  assert.equal(input.value, '')
+  assert.deepEqual(view.noteCalls.deletes, [['owner', '2026-09-29']])
+})
+
+test('note draft survives date cancel, internal navigation, unload and logout cancellation', async () => {
+  let check
+  const view = mount({ logoutGuard: { register: callback => { check = callback; return () => { check = undefined } }, loggingOut: false } })
+  const input = await view.findByLabelText('한 줄 기록 내용')
+  fireEvent.change(input, { target: { value: '아직 저장 안 함' } })
+  view.past()
+  assert.ok(view.getByRole('dialog', { name: '날짜 변경' }))
+  fireEvent.click(within(view.getByRole('dialog')).getByRole('button', { name: '취소' }))
+  assert.equal(input.value, '아직 저장 안 함')
+  const unload = new window.Event('beforeunload', { cancelable: true })
+  window.dispatchEvent(unload)
+  assert.equal(unload.defaultPrevented, true)
+  const link = document.createElement('a')
+  link.href = '/study'; document.body.append(link)
+  try { assert.equal(fireEvent.click(link), false) } finally { link.remove() }
+  assert.ok(view.getByRole('dialog', { name: '작성 내용 확인' }))
+  fireEvent.click(view.getByRole('button', { name: '계속 작성' }))
+  let decision
+  act(() => { decision = check() })
+  fireEvent.click(view.getByRole('button', { name: '계속 작성' }))
+  assert.equal(await decision, false)
+  assert.equal(input.value, '아직 저장 안 함')
+  view.past()
+  await act(async () => fireEvent.click(view.getByRole('button', { name: '이동하기' })))
+  assert.equal(view.getByLabelText('한 줄 기록 내용').value, '')
+  assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-09-29')
+})
+
+test('midnight waits for a note save and keeps an unsaved note if the date change is cancelled', async () => {
+  let finish, check
+  const view = mount({
+    noteWrite: () => new Promise((resolve, reject) => { finish = () => reject(new Error('저장 실패')) }),
+    logoutGuard: { register: callback => { check = callback; return () => { check = undefined } }, loggingOut: false },
+  })
+  const input = await view.findByLabelText('한 줄 기록 내용')
+  fireEvent.change(input, { target: { value: '자정 전 메모' } })
+  fireEvent.click(view.getByRole('button', { name: '한 줄 기록 저장' }))
+  assert.equal(await check(), false)
+  view.setToday('2026-10-01')
+  assert.equal(view.queryByRole('dialog'), null)
+  assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-09-30')
+  await act(async () => finish())
+  fireEvent.click(within(view.getByRole('dialog', { name: '날짜 변경' })).getByRole('button', { name: '취소' }))
+  assert.equal(input.value, '자정 전 메모')
+  assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-09-30')
+  assert.equal(view.getByRole('button', { name: '한 줄 기록 저장' }).disabled, false)
+})
+
+test('note read errors retry, return refresh preserves draft and ignores a late response from an old account', async () => {
+  const view = mount({ noteRead: async () => { throw new Error('offline') } })
+  await view.findByText('한 줄 기록을 불러오지 못했습니다. 다시 시도해주세요.')
+  assert.equal(view.queryByLabelText('한 줄 기록 내용'), null)
+  view.options.noteRead = () => '저장한 메모'
+  fireEvent.click(view.getByRole('button', { name: '한 줄 기록 다시 불러오기' }))
+  const input = await view.findByLabelText('한 줄 기록 내용')
+  assert.equal(input.value, '저장한 메모')
+  let finish
+  view.options.noteRead = () => new Promise(resolve => { finish = resolve })
+  returnToTab()
+  await waitFor(() => assert.ok(finish))
+  fireEvent.change(input, { target: { value: '보호할 입력' } })
+  await act(async () => finish('다른 탭 메모'))
+  assert.equal(input.value, '보호할 입력')
+  await flushReturnEvents()
+  returnToTab()
+  await flushReturnEvents()
+  assert.equal(view.noteCalls.reads.length, 3)
+  let oldResponse
+  view.options.noteRead = (uid) => uid === 'owner' ? new Promise(resolve => { oldResponse = resolve }) : '다른 계정 기록'
+  fireEvent.click(view.getByRole('button', { name: '입력 되돌리기' }))
+  await waitFor(() => assert.ok(oldResponse))
+  view.setUser('other')
+  const other = await view.findByLabelText('한 줄 기록 내용')
+  await act(async () => oldResponse('이전 계정 내용'))
+  assert.equal(other.value, '다른 계정 기록')
 })
 
 test('tab return coalesces events and in-flight reads while preserving a new todo draft', async () => {

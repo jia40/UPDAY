@@ -9,7 +9,7 @@
 | `npm test` | 순수 날짜/집계 함수, jsdom React 화면, 데이터 접근 요청 구성·재시도·캐시·인증 | npm 의존성 설치 |
 | `npm run lint` | ESLint 및 React 관련 정적 검사 | npm 의존성 설치 |
 | `npm run build` | TypeScript 검사 및 Vite 프로덕션 빌드 | 웹 앱 환경 변수는 실제 화면 사용에 필요 |
-| `npm run test:rules` | todos·studyLogs·interviewQuestions·applications 및 이월 규칙의 허용/거부 | Java 21 이상, Firebase CLI/에뮬레이터 다운로드·실행 환경 |
+| `npm run test:rules` | todos·studyLogs·interviewQuestions·applications·이월·한 줄 기록 규칙의 허용/거부 | Java 21 이상, Firebase CLI/에뮬레이터 다운로드·실행 환경 |
 
 일반 테스트의 Firebase·REST 발송/조회는 주로 테스트 대역을 사용합니다. 실제 Firebase 연결·메일 수신·운영 인덱스·배포·스크린 리더·모바일 레이아웃 검증을 대신하지 않습니다. 테스트 수는 바뀔 수 있으므로 실행 결과의 pass·fail·skipped를 확인합니다.
 
@@ -52,6 +52,8 @@ package.json은 demo-upday 프로젝트로 Firestore emulators:exec를 실행하
 - 과거 날짜 조회·이월 영수증 실패 상태·새로고침 복구
 - 미완료 선택 이월·원본 보존·삭제 후 같은 날 재이월 제한
 - 자정·탭 복귀의 오늘 갱신과 과거 기록 보존
+- 한 줄 기록의 선택 날짜별 등록·수정·삭제, 200자 경계·줄바꿈 처리, 조회/저장 실패와 재시도
+- 한 줄 기록의 날짜·화면 이동/로그아웃/새로고침 보호, 저장 중 이동 제한, 계정 전환 및 탭 복귀 입력 유지
 - 작성·수정 중 날짜 선택·오늘로 이동의 확인/취소, 원래 제목 복원·저장 성공 후 보호 해제
 - 자정 전환 취소 시 입력 유지 및 지난 날짜 저장 제한, 저장 중 날짜 변경 보류·실패 입력 보호
 - 계정 변경 시 확인창·입력 정리와 이전 계정 저장 응답 무시

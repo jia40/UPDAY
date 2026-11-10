@@ -368,3 +368,8 @@
 .today-date-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 16px 0; }
 .today-date-controls label { font-size: 14px; font-weight: 600; }
 .today-date-controls input[type=date] { width: auto; min-height: 44px; max-width: 100%; }
+
+.today-daily-note label { display: block; margin: 8px 0; font-weight: 600; }
+.today-daily-note textarea { display: block; width: 100%; padding: 10px 12px; border: 1px solid #b8c9bd; border-radius: 8px; font: inherit; resize: vertical; }
+.today-daily-note textarea:focus-visible { outline: 2px solid #647268; outline-offset: 2px; }
+.today-daily-note__actions { display: flex; flex-wrap: wrap; gap: 8px; }

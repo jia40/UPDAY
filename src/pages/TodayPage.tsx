@@ -1,6 +1,9 @@
 import ConfirmModal from '../components/common/ConfirmModal'
 import CompleteModal from '../components/common/CompleteModal'
 import TodayStudySummary from '../components/TodayStudySummary'
+import TodayDailyNote from '../components/TodayDailyNote'
+import { useDailyNote } from '../hooks/useDailyNote'
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges'
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { FirebaseError } from 'firebase/app'
 import { useAuth } from '../hooks/useAuth'
@@ -94,7 +97,12 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
   const createId = useRef<string | null>(null)
   const savedRefresh = useRef(false)
   const observedToday = useRef(today)
-  const dirty = Boolean(title.trim()) || (editing !== null && draft.trim() !== originalDraft.trim())
+  const note = useDailyNote(userId, date)
+  const leave = useUnsavedChanges(note.dirty || note.pending, note.pending)
+  const noteBlocksDate = leave.blocked || leave.open || note.confirmDelete
+  const noteLock = note.lock
+  const dirty = note.dirty || Boolean(title.trim()) || (editing !== null && draft.trim() !== originalDraft.trim())
+  const dateBlocked = pending || carryConfirm || deleteTarget !== null || nextDate !== null || noteBlocksDate
   const refresh = useCallback(async (isActive: () => boolean) => {
     const saved = savedRefresh.current
     savedRefresh.current = false
@@ -120,17 +128,17 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
   const listRefresh = useRefreshTask(refresh, pending || editing !== null || carryConfirm || deleteTarget !== null || nextDate !== null || carryComplete || deleteComplete)
   usePageRefresh(listRefresh.request)
   const changeDate = useCallback((target: string) => {
-    if (target === date || target > today || lock.current || pending || carryConfirm || deleteTarget !== null || nextDate !== null) return
+    if (target === date || target > today || lock.current || noteLock.current || dateBlocked) return
     if (dirty) { listRefresh.invalidate(); setNextDate(target) }
     else onDateChange(target)
-  }, [date, today, pending, carryConfirm, deleteTarget, nextDate, dirty, onDateChange, listRefresh])
+  }, [date, today, dateBlocked, noteLock, dirty, onDateChange, listRefresh])
 
   useEffect(() => {
-    if (today === observedToday.current || pending || carryConfirm || deleteTarget || carryComplete || deleteComplete || nextDate) return
+    if (today === observedToday.current || dateBlocked || lock.current || noteLock.current || carryComplete || deleteComplete) return
     const previous = observedToday.current
     observedToday.current = today
     if (date === previous || date > today) changeDate(today)
-  }, [today, date, pending, carryConfirm, deleteTarget, carryComplete, deleteComplete, nextDate, changeDate])
+  }, [today, date, dateBlocked, noteLock, carryComplete, deleteComplete, changeDate])
   useEffect(() => {
     alive.current = true
     return () => { alive.current = false }
@@ -175,11 +183,11 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
       <header><p className="today-eyebrow"><span className="today-label">TODAY</span><time dateTime={date}>{date.replaceAll('-', '. ')}</time></p><div className="today-heading-row"><h1 id="today-heading">To do list</h1></div></header>
       <div className="today-date-controls">
         <label htmlFor="todo-date">할 일 조회 날짜</label>
-        <input id="todo-date" type="date" value={date} min="0001-01-01" max={today} disabled={pending || carryConfirm || deleteTarget !== null || nextDate !== null} onChange={(event) => {
+        <input id="todo-date" type="date" value={date} min="0001-01-01" max={today} disabled={dateBlocked} onChange={(event) => {
           const value = event.target.value
           if (event.target.validity.valid && value && value <= today) changeDate(value)
         }} />
-        <button type="button" disabled={date === today || pending || carryConfirm || deleteTarget !== null || nextDate !== null} onClick={() => changeDate(today)}>오늘로</button>
+        <button type="button" disabled={date === today || dateBlocked} onClick={() => changeDate(today)}>오늘로</button>
       </div>
       <TodayStudySummary userId={userId} date={date} />
       <section className="today-panel" aria-label="날짜별 할 일 관리" aria-busy={loading || pending}>
@@ -217,7 +225,8 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
           </li>)}</ul>
         )}
       </section>
-      <p className="today-note">지난 날짜는 조회만 가능하며 미완료 항목을 선택해 오늘로 가져오면 원본을 보관하고 새 할 일을 만듭니다. 자동 이월되지 않으며 오늘로 가져온 항목을 삭제해도 같은 날 다시 이월할 수 없습니다.</p>
+      <TodayDailyNote note={note} disabled={pending || nextDate !== null || leave.blocked || leave.open} />
+      <p className="today-note">지난 날짜의 할 일은 조회만 가능하며 미완료 항목을 선택해 오늘로 가져오면 원본을 보관하고 새 할 일을 만듭니다. 자동 이월되지 않으며 오늘로 가져온 항목을 삭제해도 같은 날 다시 이월할 수 없습니다.</p>
       <ConfirmModal open={carryConfirm} title="오늘로 가져오기" message={`선택한 ${selected.length}개 항목을 오늘 할 일로 가져올까요? 지난 기록은 그대로 유지됩니다.`} confirmLabel="가져오기" isPending={pending} error={error}
         onClose={() => { if (!lock.current) { setCarryConfirm(false); setError('') } }}
         onConfirm={() => { if (!carryUnavailable) void run(() => carryTodos(userId, selected), () => { setSelected([]); setCarryConfirm(false); setCarryComplete(true) }) }} />
@@ -231,7 +240,8 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
       <CompleteModal open={deleteComplete} message="할 일 삭제가 완료되었습니다." onClose={() => setDeleteComplete(false)} />
       <ConfirmModal open={nextDate !== null} title="날짜 변경" message={`작성 중인 내용을 버리고 ${nextDate ?? ''} 날짜로 이동할까요?`} confirmLabel="이동하기" isPending={pending}
         onClose={() => { if (!lock.current) { observedToday.current = today; setNextDate(null) } }}
-        onConfirm={() => { if (!lock.current && nextDate && nextDate <= today) onDateChange(nextDate) }} />
+        onConfirm={() => { if (!lock.current && !noteLock.current && nextDate && nextDate <= today) onDateChange(nextDate) }} />
+      <ConfirmModal open={leave.open} title="작성 내용 확인" message="작성 중인 한 줄 기록이 저장되지 않습니다. 나가시겠습니까?" confirmLabel="나가기" cancelLabel="계속 작성" onClose={leave.cancel} onConfirm={leave.confirm} />
     </section>
   )
 }
