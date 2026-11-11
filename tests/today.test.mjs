@@ -168,6 +168,103 @@ test('note draft survives date cancel, internal navigation, unload and logout ca
   assert.equal(view.getByLabelText('할 일 조회 날짜').value, '2026-09-29')
 })
 
+function unloadBlocked() {
+  const event = new window.Event('beforeunload', { cancelable: true })
+  window.dispatchEvent(event)
+  return event.defaultPrevented
+}
+
+function clickStudyLink() {
+  const link = document.createElement('a')
+  link.href = '/study'
+  // Capture whether the guard allowed navigation without actually leaving jsdom.
+  let reachedLink = false
+  link.addEventListener('click', event => { reachedLink = true; event.preventDefault() })
+  document.body.append(link)
+  try { fireEvent.click(link); return reachedLink } finally { link.remove() }
+}
+
+for (const editing of [false, true]) {
+  test(`todo ${editing ? 'edit' : 'new'} draft protects navigation, unload and logout without a note draft`, async () => {
+    let check
+    const view = mount({ logoutGuard: { register: callback => { check = callback; return () => { check = undefined } }, loggingOut: false } })
+    await view.findByLabelText('지난 할 일 더보기')
+    if (editing) {
+      fireEvent.click(view.getByLabelText('지난 할 일 더보기'))
+      fireEvent.click(view.getByRole('button', { name: '수정하기' }))
+    }
+    const input = view.getByLabelText(editing ? '할 일 수정' : '새 할 일')
+    assert.equal(unloadBlocked(), false)
+    fireEvent.change(input, { target: { value: '할 일 초안' } })
+    assert.equal(unloadBlocked(), true)
+    assert.equal(clickStudyLink(), false)
+    assert.ok(view.getByRole('dialog', { name: '작성 내용 확인' }))
+    fireEvent.click(view.getByRole('button', { name: '계속 작성' }))
+    let decision
+    act(() => { decision = check() })
+    fireEvent.click(view.getByRole('button', { name: '계속 작성' }))
+    assert.equal(await decision, false)
+    assert.equal(input.value, '할 일 초안')
+    fireEvent.change(input, { target: { value: editing ? '지난 할 일' : '' } })
+    assert.equal(unloadBlocked(), false)
+    assert.equal(clickStudyLink(), true)
+    assert.equal(await check(), true)
+  })
+}
+
+test('switching edited todo confirms only a changed title and preserves unrelated drafts', async () => {
+  const view = mount({ todos: () => [{ ...item, id: 'a', title: '첫 번째' }, { ...item, id: 'b', title: '두 번째' }] })
+  const edit = title => {
+    fireEvent.click(view.getByLabelText(`${title} 더보기`))
+    fireEvent.click(view.getByRole('button', { name: '수정하기' }))
+  }
+  await view.findByLabelText('첫 번째 더보기')
+  edit('첫 번째'); edit('두 번째')
+  assert.equal(view.queryByRole('dialog'), null)
+  fireEvent.change(view.getByLabelText('새 할 일'), { target: { value: '새 제목' } })
+  fireEvent.change(await view.findByLabelText('한 줄 기록 내용'), { target: { value: '한 줄 기록 초안' } })
+  fireEvent.change(view.getByLabelText('할 일 수정'), { target: { value: '두 번째 수정 중' } })
+  edit('첫 번째')
+  const dialog = () => within(view.getByRole('dialog', { name: '할 일 편집 전환' }))
+  fireEvent.click(dialog().getByRole('button', { name: '취소' }))
+  assert.equal(view.getByLabelText('할 일 수정').value, '두 번째 수정 중')
+  edit('첫 번째')
+  fireEvent.click(dialog().getByRole('button', { name: '전환하기' }))
+  assert.equal(view.getByLabelText('할 일 수정').value, '첫 번째')
+  assert.equal(view.getByLabelText('새 할 일').value, '새 제목')
+  assert.equal(view.getByLabelText('한 줄 기록 내용').value, '한 줄 기록 초안')
+  assert.deepEqual(view.calls.rename, [])
+})
+
+test('todo save blocks navigation without a dialog, retains failure draft, and releases protection after retry', async () => {
+  let check, settle
+  const view = mount({
+    create: () => new Promise((resolve, reject) => { settle = { resolve, reject } }),
+    logoutGuard: { register: callback => { check = callback; return () => { check = undefined } }, loggingOut: false },
+  })
+  await view.findByLabelText('지난 할 일 더보기')
+  const input = view.getByLabelText('새 할 일')
+  fireEvent.change(input, { target: { value: '저장할 할 일' } })
+  const save = () => fireEvent.click(view.getByRole('button', { name: '추가' }))
+  save()
+  assert.equal(unloadBlocked(), true)
+  assert.equal(clickStudyLink(), false)
+  assert.equal(await check(), false)
+  assert.equal(view.queryByRole('dialog'), null)
+  assert.equal(view.getByLabelText('할 일 조회 날짜').disabled, true)
+  assert.equal(view.getByLabelText('지난 할 일 더보기').disabled, true)
+  await act(async () => settle.reject(new Error('저장 실패')))
+  assert.equal(input.value, '저장할 할 일')
+  assert.equal(unloadBlocked(), true)
+  save()
+  await act(async () => settle.resolve())
+  assert.equal(input.value, '')
+  assert.equal(unloadBlocked(), false)
+  assert.equal(clickStudyLink(), true)
+  assert.equal(await check(), true)
+  assert.deepEqual(view.calls.create[1], view.calls.create[0])
+})
+
 test('midnight waits for a note save and keeps an unsaved note if the date change is cancelled', async () => {
   let finish, check
   const view = mount({

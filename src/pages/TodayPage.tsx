@@ -88,6 +88,7 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [originalDraft, setOriginalDraft] = useState('')
+  const [editTarget, setEditTarget] = useState<Todo | null>(null)
   const [nextDate, setNextDate] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Todo | null>(null)
@@ -98,11 +99,12 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
   const savedRefresh = useRef(false)
   const observedToday = useRef(today)
   const note = useDailyNote(userId, date)
-  const leave = useUnsavedChanges(note.dirty || note.pending, note.pending)
-  const noteBlocksDate = leave.blocked || leave.open || note.confirmDelete
   const noteLock = note.lock
-  const dirty = note.dirty || Boolean(title.trim()) || (editing !== null && draft.trim() !== originalDraft.trim())
-  const dateBlocked = pending || carryConfirm || deleteTarget !== null || nextDate !== null || noteBlocksDate
+  const editDirty = editing !== null && draft.trim() !== originalDraft.trim()
+  const dirty = note.dirty || Boolean(title.trim()) || editDirty
+  const saving = pending || note.pending
+  const leave = useUnsavedChanges(dirty || saving, saving)
+  const dateBlocked = leave.blocked || leave.open || note.confirmDelete || carryConfirm || deleteTarget !== null || nextDate !== null || editTarget !== null
   const refresh = useCallback(async (isActive: () => boolean) => {
     const saved = savedRefresh.current
     savedRefresh.current = false
@@ -125,7 +127,7 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
     ])
     if (isActive()) setCarryLoading(false)
   }, [userId, date, today, history])
-  const listRefresh = useRefreshTask(refresh, pending || editing !== null || carryConfirm || deleteTarget !== null || nextDate !== null || carryComplete || deleteComplete)
+  const listRefresh = useRefreshTask(refresh, pending || editing !== null || carryConfirm || deleteTarget !== null || nextDate !== null || editTarget !== null || carryComplete || deleteComplete)
   usePageRefresh(listRefresh.request)
   const changeDate = useCallback((target: string) => {
     if (target === date || target > today || lock.current || noteLock.current || dateBlocked) return
@@ -166,10 +168,19 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
   }
   function add(event: FormEvent) {
     event.preventDefault()
-    if (date !== today || nextDate !== null) return
+    if (date !== today || dateBlocked) return
     try { validTitle(title) } catch (reason) { setError(message(reason)); return }
     createId.current ??= newTodoId()
     void run(() => createTodo(createId.current!, userId, date, title), () => { setTitle(''); createId.current = null })
+  }
+  function startEdit(todo: Todo) {
+    listRefresh.invalidate()
+    setEditing(todo.id); setDraft(todo.title); setOriginalDraft(todo.title); setError('')
+  }
+  function requestEdit(todo: Todo) {
+    if (date !== today || dateBlocked || lock.current || noteLock.current) return
+    if (editDirty) setEditTarget(todo)
+    else startEdit(todo)
   }
   const completed = todos.filter((todo) => todo.completed).length
   const progress = todos.length ? Math.round(completed / todos.length * 100) : 0
@@ -213,19 +224,19 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
             {history && editing !== todo.id ? <>
               <label className="todo-check"><input type="checkbox" aria-label={`${todo.title} 이월 선택`} checked={selected.includes(todo.id)} disabled={carryUnavailable || pending || todo.completed || carried.has(todo.id)} onChange={(event) => setSelected((ids) => event.target.checked ? [...ids, todo.id] : ids.filter((id) => id !== todo.id))} /><span className={todo.completed ? 'todo-completed' : ''}>{todo.title}</span></label>
               <span className="todo-history-status">{todo.completed ? '완료' : carryLoading || carryError ? '이월 여부 확인 필요' : carried.has(todo.id) ? '오늘로 이월됨' : '미완료'}</span>
-            </> : editing === todo.id ? <form className="todo-edit" onSubmit={(event) => { event.preventDefault(); if (date === today && nextDate === null) void run(() => renameTodo(todo.id, draft), () => { setEditing(null); setDraft(''); setOriginalDraft('') }) }}>
+            </> : editing === todo.id ? <form className="todo-edit" onSubmit={(event) => { event.preventDefault(); if (date === today && !dateBlocked) void run(() => renameTodo(todo.id, draft), () => { setEditing(null); setDraft(''); setOriginalDraft('') }) }}>
               <label htmlFor={`edit-${todo.id}`}>할 일 수정</label><input id={`edit-${todo.id}`} autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={100} disabled={pending} />
               <div className="todo-actions"><button disabled={pending || date !== today} type="submit">저장</button><button disabled={pending} type="button" onClick={() => { setEditing(null); setDraft(''); setOriginalDraft(''); setError('') }}>취소</button></div>
             </form> : <>
               <label className="todo-check"><input type="checkbox" checked={todo.completed} disabled={pending} onChange={() => void run(() => completeTodo(todo.id, !todo.completed))} /><span className={todo.completed ? 'todo-completed' : ''}>{todo.title}</span></label>
-              <TodoActions title={todo.title} disabled={pending}
-                onEdit={() => { listRefresh.invalidate(); setEditing(todo.id); setDraft(todo.title); setOriginalDraft(todo.title); setError('') }}
+              <TodoActions title={todo.title} disabled={dateBlocked}
+                onEdit={() => requestEdit(todo)}
                 onDelete={() => { listRefresh.invalidate(); setError(''); setDeleteTarget(todo) }} />
             </>}
           </li>)}</ul>
         )}
       </section>
-      <TodayDailyNote note={note} disabled={pending || nextDate !== null || leave.blocked || leave.open} />
+      <TodayDailyNote note={note} disabled={dateBlocked} />
       <p className="today-note">지난 날짜의 할 일은 조회만 가능하며 미완료 항목을 선택해 오늘로 가져오면 원본을 보관하고 새 할 일을 만듭니다. 자동 이월되지 않으며 오늘로 가져온 항목을 삭제해도 같은 날 다시 이월할 수 없습니다.</p>
       <ConfirmModal open={carryConfirm} title="오늘로 가져오기" message={`선택한 ${selected.length}개 항목을 오늘 할 일로 가져올까요? 지난 기록은 그대로 유지됩니다.`} confirmLabel="가져오기" isPending={pending} error={error}
         onClose={() => { if (!lock.current) { setCarryConfirm(false); setError('') } }}
@@ -241,7 +252,13 @@ function TodayContent({ userId, date, today, onDateChange }: { userId: string; d
       <ConfirmModal open={nextDate !== null} title="날짜 변경" message={`작성 중인 내용을 버리고 ${nextDate ?? ''} 날짜로 이동할까요?`} confirmLabel="이동하기" isPending={pending}
         onClose={() => { if (!lock.current) { observedToday.current = today; setNextDate(null) } }}
         onConfirm={() => { if (!lock.current && !noteLock.current && nextDate && nextDate <= today) onDateChange(nextDate) }} />
-      <ConfirmModal open={leave.open} title="작성 내용 확인" message="작성 중인 한 줄 기록이 저장되지 않습니다. 나가시겠습니까?" confirmLabel="나가기" cancelLabel="계속 작성" onClose={leave.cancel} onConfirm={leave.confirm} />
+      <ConfirmModal open={editTarget !== null} title="할 일 편집 전환" message="수정 중인 제목을 버리고 다른 할 일을 수정할까요?" confirmLabel="전환하기"
+        onClose={() => setEditTarget(null)} onConfirm={() => {
+          if (!editTarget || lock.current || noteLock.current || leave.blocked || leave.open) return
+          if (date === today) startEdit(editTarget)
+          setEditTarget(null)
+        }} />
+      <ConfirmModal open={leave.open} title="작성 내용 확인" message="작성 중인 내용이 저장되지 않습니다. 나가시겠습니까?" confirmLabel="나가기" cancelLabel="계속 작성" onClose={leave.cancel} onConfirm={leave.confirm} />
     </section>
   )
 }
