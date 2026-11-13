@@ -26,7 +26,7 @@ java -version
 npm run test:rules
 ```
 
-package.json은 demo-upday 프로젝트로 Firestore emulators:exec를 실행하고 네 개 규칙 파일을 순차 검증합니다. 운영 데이터에 연결하는 명령이 아닙니다. Java나 도구 다운로드가 불가능하면 실행하지 못한 것으로 기록하고 통과했다고 표시하지 않습니다.
+package.json은 demo-upday 프로젝트로 Firestore emulators:exec를 실행하고 한 줄 기록을 포함한 다섯 개 테스트 파일을 순차 검증합니다. 운영 데이터에 연결하는 명령이 아닙니다. Java나 도구 다운로드가 불가능하면 실행하지 못한 것으로 기록하고 통과했다고 표시하지 않습니다.
 
 일반 `npm test`에서는 FIRESTORE_EMULATOR_HOST가 없으면 규칙 전용 테스트를 건너뜁니다. 에뮬레이터 테스트를 실행한 것과 대상 운영 프로젝트에 규칙을 적용한 것은 별개입니다. 에뮬레이터는 운영 복합 인덱스 준비 여부를 보장하지 않습니다.
 
