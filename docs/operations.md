@@ -19,7 +19,7 @@ $targetProject = 'your-project-id'
 
 ## Firestore 규칙
 
-루트 `firebase.json`은 `firestore.rules`와 `firestore.indexes.json`을 참조합니다. 현재 규칙은 todos·studyLogs·interviewQuestions·applications와 users/{userId}/todoCarryovers를 정의합니다.
+루트 `firebase.json`은 `firestore.rules`와 `firestore.indexes.json`을 참조합니다. 현재 규칙은 todos·studyLogs·interviewQuestions·applications와 users/{userId}/todoCarryovers·users/{userId}/dailyNotes를 정의합니다.
 
 - 기존 배포본에만 있는 컬렉션 규칙을 보존·병합합니다.
 - 광범위한 허용 규칙이 본인 문서 제한을 무효화하지 않는지 확인합니다.
@@ -37,9 +37,9 @@ npx --yes firebase-tools deploy --only firestore:rules --project $targetProject
 
 프런트엔드가 새 필드를 사용하기 전에 호환되는 규칙을 먼저 준비합니다. 이전 클라이언트와 데이터의 호환성도 확인하세요.
 
-## Study 인덱스
+## Study·Job 인덱스
 
-`firestore.indexes.json`에는 studyLogs의 복합 인덱스 두 개가 있습니다.
+`firestore.indexes.json`에는 studyLogs와 applications의 복합 인덱스가 각각 두 개 있습니다.
 
 | 조건 | 인덱스 필드 순서 |
 | --- | --- |
@@ -131,6 +131,8 @@ npm run preview
 인증/Firestore 분리 후 현재 빌드에서는 기존 500KB 청크 경고가 발생하지 않습니다. 공개 경로의 전송량 변화와 측정 한계는 [로딩 성능 분석](performance.md)을 참고하세요. 경고 해소를 실제 브라우저 로딩 시간 검증 완료로 간주하지 않습니다.
 
 ## 배포 후 확인
+
+첫 배포의 로컬 검증 결과와 운영 확인 항목은 [1차 배포 검증 기록](release-verification.md)에서 관리합니다.
 
 - 대상 프로젝트·계정이 맞고 모든 주요 화면이 직접 경로로 열리는지 확인
 - 로그인·회원가입 중간 실패·로그아웃·이름 수정·비밀번호 재설정 메일 확인
